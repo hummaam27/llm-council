@@ -8,9 +8,15 @@ wheels/
 
 # Virtual environments
 .venv
+venv/
+env/
 
 # Keys and secrets
 .env
+.env.local
+.env.*.local
+*.pem
+*.key
 
 # Data files
 data/
@@ -19,3 +25,18 @@ data/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# OS files
+Thumbs.db

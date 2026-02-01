@@ -6,13 +6,44 @@ export default function Sidebar({
   currentConversationId,
   onSelectConversation,
   onNewConversation,
+  onOpenConfig,
+  onDeleteConversation,
+  activeMode,
+  onModeChange,
 }) {
+  const handleDelete = (e, convId) => {
+    e.stopPropagation();
+    if (window.confirm('Are you sure you want to delete this conversation?')) {
+      onDeleteConversation(convId);
+    }
+  };
+
   return (
     <div className="sidebar">
       <div className="sidebar-header">
         <h1>LLM Council</h1>
-        <button className="new-conversation-btn" onClick={onNewConversation}>
-          + New Conversation
+        <div className="sidebar-actions">
+          <button className="config-btn" onClick={onOpenConfig} title="Configure Council">
+            ⚙️
+          </button>
+          <button className="new-conversation-btn" onClick={onNewConversation}>
+            + New
+          </button>
+        </div>
+      </div>
+
+      <div className="mode-switcher">
+        <button
+          className={`mode-btn ${activeMode === 'council' ? 'active' : ''}`}
+          onClick={() => onModeChange('council')}
+        >
+          🏛️ Council
+        </button>
+        <button
+          className={`mode-btn ${activeMode === 'debate' ? 'active' : ''}`}
+          onClick={() => onModeChange('debate')}
+        >
+          ⚔️ Debate
         </button>
       </div>
 
@@ -28,12 +59,21 @@ export default function Sidebar({
               }`}
               onClick={() => onSelectConversation(conv.id)}
             >
-              <div className="conversation-title">
-                {conv.title || 'New Conversation'}
+              <div className="conversation-content">
+                <div className="conversation-title">
+                  {conv.title || 'New Conversation'}
+                </div>
+                <div className="conversation-meta">
+                  {conv.message_count} messages
+                </div>
               </div>
-              <div className="conversation-meta">
-                {conv.message_count} messages
-              </div>
+              <button
+                className="delete-conversation-btn"
+                onClick={(e) => handleDelete(e, conv.id)}
+                title="Delete conversation"
+              >
+                🗑️
+              </button>
             </div>
           ))
         )}

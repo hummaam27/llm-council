@@ -18,8 +18,31 @@
   color: #333;
 }
 
+.sidebar-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.config-btn {
+  padding: 10px;
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 18px;
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.config-btn:hover {
+  background: #e0e0e0;
+  border-color: #ccc;
+}
+
 .new-conversation-btn {
-  width: 100%;
+  flex: 1;
   padding: 10px;
   background: #4a90e2;
   border: 1px solid #4a90e2;
@@ -50,11 +73,15 @@
 }
 
 .conversation-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 12px;
   margin-bottom: 4px;
   border-radius: 6px;
   cursor: pointer;
   transition: background 0.2s;
+  gap: 8px;
 }
 
 .conversation-item:hover {
@@ -66,13 +93,77 @@
   border: 1px solid #4a90e2;
 }
 
+.conversation-content {
+  flex: 1;
+  min-width: 0;
+}
+
 .conversation-title {
   color: #333;
   font-size: 14px;
   margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .conversation-meta {
   color: #999;
   font-size: 12px;
+}
+
+.delete-conversation-btn {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+}
+
+.conversation-item:hover .delete-conversation-btn {
+  opacity: 0.6;
+}
+
+.delete-conversation-btn:hover {
+  opacity: 1 !important;
+}
+
+.mode-switcher {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #f0f0f0;
+}
+
+.mode-btn {
+  flex: 1;
+  padding: 10px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: #666;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.mode-btn:hover {
+  background: #e8e8e8;
+  color: #333;
+}
+
+.mode-btn.active {
+  background: #fff;
+  border-color: #4a90e2;
+  color: #4a90e2;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }

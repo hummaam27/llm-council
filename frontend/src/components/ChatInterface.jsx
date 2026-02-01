@@ -1,16 +1,21 @@
 import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import Stage1 from './Stage1';
+import Stage1Streaming from './Stage1Streaming';
 import Stage2 from './Stage2';
 import Stage3 from './Stage3';
+import { exportConversationToPdf } from '../utils/exportPdf';
 import './ChatInterface.css';
 
 export default function ChatInterface({
   conversation,
   onSendMessage,
   isLoading,
+  activeJobId,
+  onCancelJob,
 }) {
   const [input, setInput] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -72,14 +77,14 @@ export default function ChatInterface({
                 <div className="assistant-message">
                   <div className="message-label">LLM Council</div>
 
-                  {/* Stage 1 */}
-                  {msg.loading?.stage1 && (
-                    <div className="stage-loading">
-                      <div className="spinner"></div>
-                      <span>Running Stage 1: Collecting individual responses...</span>
-                    </div>
+                  {/* Stage 1 - Show streaming view while loading, final view when complete */}
+                  {msg.loading?.stage1 && msg.progress?.model_streams && (
+                    <Stage1Streaming 
+                      modelStreams={msg.progress.model_streams} 
+                      isLoading={true}
+                    />
                   )}
-                  {msg.stage1 && <Stage1 responses={msg.stage1} />}
+                  {msg.stage1 && !msg.loading?.stage1 && <Stage1 responses={msg.stage1} />}
 
                   {/* Stage 2 */}
                   {msg.loading?.stage2 && (
@@ -110,10 +115,51 @@ export default function ChatInterface({
           ))
         )}
 
-        {isLoading && (
+        {isLoading && activeJobId && onCancelJob && (
           <div className="loading-indicator">
-            <div className="spinner"></div>
-            <span>Consulting the council...</span>
+            <button 
+              className="cancel-button"
+              onClick={() => onCancelJob(activeJobId)}
+            >
+              Cancel Job
+            </button>
+          </div>
+        )}
+
+        {conversation.messages.length > 0 && !isLoading && (
+          <div className="export-section">
+            <button
+              className="export-button"
+              onClick={async () => {
+                setIsExporting(true);
+                try {
+                  await exportConversationToPdf(conversation, conversation.title || 'LLM Council Conversation');
+                } catch (error) {
+                  console.error('Failed to export PDF:', error);
+                  alert('Failed to export PDF. Please try again.');
+                } finally {
+                  setIsExporting(false);
+                }
+              }}
+              disabled={isExporting}
+            >
+              {isExporting ? (
+                <>
+                  <span className="export-spinner"></span>
+                  Exporting...
+                </>
+              ) : (
+                <>
+                  <svg className="export-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="12" y1="18" x2="12" y2="12"></line>
+                    <line x1="9" y1="15" x2="15" y2="15"></line>
+                  </svg>
+                  Export to PDF
+                </>
+              )}
+            </button>
           </div>
         )}
 

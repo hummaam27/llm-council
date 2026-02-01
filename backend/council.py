@@ -1,29 +1,103 @@
 """3-stage LLM Council orchestration."""
 
-from typing import List, Dict, Any, Tuple
-from .openrouter import query_models_parallel, query_model
-from .config import COUNCIL_MODELS, CHAIRMAN_MODEL
+import asyncio
+from typing import List, Dict, Any, Tuple, Callable, Optional
+from .openrouter import query_model, stream_model, query_models_parallel
+from . import config
 
 
-async def stage1_collect_responses(user_query: str) -> List[Dict[str, Any]]:
+async def stage1_collect_responses_streaming(
+    user_query: str,
+    on_chunk: Optional[Callable[[str, str], None]] = None,  # (model, chunk)
+    on_model_complete: Optional[Callable[[str, bool], None]] = None,
+) -> List[Dict[str, Any]]:
     """
-    Stage 1: Collect individual responses from all council models.
+    Stage 1: Collect individual responses from all council models with streaming.
 
     Args:
         user_query: The user's question
+        on_chunk: Optional callback(model_name, text_chunk) called for each chunk
+        on_model_complete: Optional callback(model_name, success) called when each model finishes
 
     Returns:
         List of dicts with 'model' and 'response' keys
     """
     messages = [{"role": "user", "content": user_query}]
-
-    # Query all models in parallel
-    responses = await query_models_parallel(COUNCIL_MODELS, messages)
+    models = config.get_council_models()
+    
+    async def stream_with_callback(model: str) -> tuple:
+        """Stream a model and report progress. No timeout - let it run as long as needed."""
+        try:
+            async def chunk_handler(chunk: str):
+                if on_chunk:
+                    await on_chunk(model, chunk)
+            
+            # No timeout - let the model respond as long as it needs
+            result = await stream_model(model, messages, chunk_handler)
+            if on_model_complete:
+                await on_model_complete(model, result is not None)
+            return (model, result)
+        except Exception as e:
+            if on_model_complete:
+                await on_model_complete(model, False)
+            return (model, None)
+    
+    # Stream all models in parallel
+    tasks = [stream_with_callback(model) for model in models]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
 
     # Format results
     stage1_results = []
-    for model, response in responses.items():
-        if response is not None:  # Only include successful responses
+    for item in results:
+        if isinstance(item, Exception):
+            continue
+        model, response = item
+        if response is not None:
+            stage1_results.append({
+                "model": model,
+                "response": response.get('content', '')
+            })
+
+    return stage1_results
+
+
+async def stage1_collect_responses(
+    user_query: str,
+    on_model_complete: Optional[Callable[[str, bool], None]] = None
+) -> List[Dict[str, Any]]:
+    """
+    Stage 1: Collect individual responses (non-streaming fallback).
+    """
+    messages = [{"role": "user", "content": user_query}]
+    models = config.get_council_models()
+    
+    async def query_with_callback(model: str) -> tuple:
+        try:
+            result = await asyncio.wait_for(
+                query_model(model, messages, timeout=180.0),
+                timeout=190.0
+            )
+            if on_model_complete:
+                await on_model_complete(model, result is not None)
+            return (model, result)
+        except asyncio.TimeoutError:
+            if on_model_complete:
+                await on_model_complete(model, False)
+            return (model, None)
+        except Exception:
+            if on_model_complete:
+                await on_model_complete(model, False)
+            return (model, None)
+    
+    tasks = [query_with_callback(model) for model in models]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    stage1_results = []
+    for item in results:
+        if isinstance(item, Exception):
+            continue
+        model, response = item
+        if response is not None:
             stage1_results.append({
                 "model": model,
                 "response": response.get('content', '')
@@ -95,7 +169,7 @@ Now provide your evaluation and ranking:"""
     messages = [{"role": "user", "content": ranking_prompt}]
 
     # Get rankings from all council models in parallel
-    responses = await query_models_parallel(COUNCIL_MODELS, messages)
+    responses = await query_models_parallel(config.get_council_models(), messages)
 
     # Format results
     stage2_results = []
@@ -159,17 +233,18 @@ Provide a clear, well-reasoned final answer that represents the council's collec
     messages = [{"role": "user", "content": chairman_prompt}]
 
     # Query the chairman model
-    response = await query_model(CHAIRMAN_MODEL, messages)
+    chairman = config.get_chairman_model()
+    response = await query_model(chairman, messages)
 
     if response is None:
         # Fallback if chairman fails
         return {
-            "model": CHAIRMAN_MODEL,
+            "model": chairman,
             "response": "Error: Unable to generate final synthesis."
         }
 
     return {
-        "model": CHAIRMAN_MODEL,
+        "model": chairman,
         "response": response.get('content', '')
     }
 

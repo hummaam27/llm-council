@@ -2,21 +2,32 @@
 
 ![llmcouncil](header.jpg)
 
-A local web application that queries multiple LLMs simultaneously, has them anonymously review and rank each other's responses, and synthesizes a final answer through a designated "Chairman" model.
+A local web application that queries multiple LLMs simultaneously, has them anonymously review and rank each other's responses, and synthesizes a final answer through a designated "Chairman" model. Also features a **multi-model debate mode** where AI models discuss topics with each other.
 
-**Based on [karpathy/llm-council](https://github.com/karpathy/llm-council)** — this fork adds dynamic model configuration, improved conversation management, and other enhancements.
+**Based on [karpathy/llm-council](https://github.com/karpathy/llm-council)** — this fork adds dynamic model configuration, multi-model debates, real-time streaming, and other enhancements.
 
 ---
 
 ## How It Works
 
+### Council Mode
+
 Instead of asking a question to a single LLM, you can assemble your own "LLM Council". The app uses [OpenRouter](https://openrouter.ai/) to send your query to multiple LLMs in a 3-stage deliberation process:
 
-1. **Stage 1: First Opinions** — Your query is sent to all council members in parallel. Individual responses are displayed in a tab view for inspection.
+1. **Stage 1: First Opinions** — Your query is sent to all council members in parallel. Individual responses stream in real-time with a tabbed interface.
 
 2. **Stage 2: Peer Review** — Each LLM reviews and ranks the other responses. Identities are anonymized (Response A, B, C...) to prevent bias. Aggregate rankings are calculated.
 
 3. **Stage 3: Final Synthesis** — The Chairman model compiles all responses and rankings into a single, comprehensive final answer.
+
+### Debate Mode
+
+Start a multi-model debate on any topic:
+
+1. **Select Debaters** — Choose 2+ models to participate in the debate
+2. **Set Topic** — Enter a topic for the models to discuss
+3. **Watch the Discussion** — Models take turns responding to each other in a chat-bubble interface
+4. **Optional Roles** — Assign adversarial roles (advocate, critic, etc.) to prevent echo chambers
 
 ---
 
@@ -33,6 +44,9 @@ Instead of asking a question to a single LLM, you can assemble your own "LLM Cou
 - **⚙️ Dynamic Model Configuration** — Configure council members and chairman via the settings pane. Select from any OpenRouter model (OpenAI, Anthropic, Google, and more).
 - **🔄 Persistent Conversations** — Navigate away from active conversations and return without losing progress or cancelling ongoing requests.
 - **📊 Model Metadata** — View context length, pricing, and descriptions when selecting models.
+- **💬 Multi-Model Debates** — Watch AI models debate topics with each other in a beautiful chat-bubble interface.
+- **⚡ Real-Time Streaming** — See model responses stream in real-time during Stage 1 with a resizable panel.
+- **🎨 Modern UI** — Clean, light-themed interface with smooth animations and intuitive controls.
 
 ---
 
