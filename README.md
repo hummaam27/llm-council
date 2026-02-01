@@ -2,66 +2,85 @@
 
 ![llmcouncil](header.jpg)
 
-The idea of this repo is that instead of asking a question to your favorite LLM provider (e.g. OpenAI GPT 5.1, Google Gemini 3.0 Pro, Anthropic Claude Sonnet 4.5, xAI Grok 4, eg.c), you can group them into your "LLM Council". This repo is a simple, local web app that essentially looks like ChatGPT except it uses OpenRouter to send your query to multiple LLMs, it then asks them to review and rank each other's work, and finally a Chairman LLM produces the final response.
+A local web application that queries multiple LLMs simultaneously, has them anonymously review and rank each other's responses, and synthesizes a final answer through a designated "Chairman" model.
 
-In a bit more detail, here is what happens when you submit a query:
+**Based on [karpathy/llm-council](https://github.com/karpathy/llm-council)** — this fork adds dynamic model configuration, improved conversation management, and other enhancements.
 
-1. **Stage 1: First opinions**. The user query is given to all LLMs individually, and the responses are collected. The individual responses are shown in a "tab view", so that the user can inspect them all one by one.
-2. **Stage 2: Review**. Each individual LLM is given the responses of the other LLMs. Under the hood, the LLM identities are anonymized so that the LLM can't play favorites when judging their outputs. The LLM is asked to rank them in accuracy and insight.
-3. **Stage 3: Final response**. The designated Chairman of the LLM Council takes all of the model's responses and compiles them into a single final answer that is presented to the user.
+---
 
-## Vibe Code Alert
+## How It Works
 
-This project was 99% vibe coded as a fun Saturday hack because I wanted to explore and evaluate a number of LLMs side by side in the process of [reading books together with LLMs](https://x.com/karpathy/status/1990577951671509438). It's nice and useful to see multiple responses side by side, and also the cross-opinions of all LLMs on each other's outputs. I'm not going to support it in any way, it's provided here as is for other people's inspiration and I don't intend to improve it. Code is ephemeral now and libraries are over, ask your LLM to change it in whatever way you like.
+Instead of asking a question to a single LLM, you can assemble your own "LLM Council". The app uses [OpenRouter](https://openrouter.ai/) to send your query to multiple LLMs in a 3-stage deliberation process:
 
-## Setup
+1. **Stage 1: First Opinions** — Your query is sent to all council members in parallel. Individual responses are displayed in a tab view for inspection.
 
-### 1. Install Dependencies
+2. **Stage 2: Peer Review** — Each LLM reviews and ranks the other responses. Identities are anonymized (Response A, B, C...) to prevent bias. Aggregate rankings are calculated.
 
-The project uses [uv](https://docs.astral.sh/uv/) for project management.
+3. **Stage 3: Final Synthesis** — The Chairman model compiles all responses and rankings into a single, comprehensive final answer.
 
-**Backend:**
-```bash
-uv sync
-```
+---
 
-**Frontend:**
-```bash
-cd frontend
-npm install
-cd ..
-```
+## Features
 
-### 2. Configure API Key
+### Core Features (from original)
+- **Multi-Model Deliberation** — Query multiple LLMs simultaneously
+- **Anonymized Peer Review** — Models can't play favorites when evaluating each other
+- **Transparent Evaluation** — View raw evaluations and parsed rankings for validation
+- **Conversation History** — All conversations are saved locally
+- **Markdown Rendering** — Full markdown support for code, tables, and formatting
 
-Create a `.env` file in the project root:
+### New Features (this fork)
+- **⚙️ Dynamic Model Configuration** — Configure council members and chairman via the settings pane. Select from any OpenRouter model (OpenAI, Anthropic, Google, and more).
+- **🔄 Persistent Conversations** — Navigate away from active conversations and return without losing progress or cancelling ongoing requests.
+- **📊 Model Metadata** — View context length, pricing, and descriptions when selecting models.
 
-```bash
-OPENROUTER_API_KEY=sk-or-v1-...
-```
+---
 
-Get your API key at [openrouter.ai](https://openrouter.ai/). Make sure to purchase the credits you need, or sign up for automatic top up.
+## Quick Start
 
-### 3. Configure Models (Optional)
+### Prerequisites
 
-Edit `backend/config.py` to customize the council:
+- [Python 3.10+](https://www.python.org/)
+- [Node.js 18+](https://nodejs.org/)
+- [uv](https://docs.astral.sh/uv/) (Python package manager)
+- [OpenRouter API key](https://openrouter.ai/)
 
-```python
-COUNCIL_MODELS = [
-    "openai/gpt-5.1",
-    "google/gemini-3-pro-preview",
-    "anthropic/claude-sonnet-4.5",
-    "x-ai/grok-4",
-]
+### Installation
 
-CHAIRMAN_MODEL = "google/gemini-3-pro-preview"
-```
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/hummaam27/LLM-Council-.git
+   cd LLM-Council-
+   ```
 
-## Running the Application
+2. **Install dependencies**
+   ```bash
+   # Backend
+   uv sync
+
+   # Frontend
+   cd frontend
+   npm install
+   cd ..
+   ```
+
+3. **Configure API key**
+   ```bash
+   cp .env.example .env
+   # Edit .env and add your OpenRouter API key
+   ```
+
+### Running
 
 **Option 1: Use the start script**
 ```bash
+# Linux/macOS
 ./start.sh
+
+# Windows
+.\start.bat
+# or
+.\start.ps1
 ```
 
 **Option 2: Run manually**
@@ -77,11 +96,86 @@ cd frontend
 npm run dev
 ```
 
-Then open http://localhost:5173 in your browser.
+Open http://localhost:5173 in your browser.
+
+---
+
+## Configuration
+
+### Dynamic Model Selection
+
+Click the ⚙️ (settings) button in the sidebar to:
+- **Select Council Members** — Choose multiple models from OpenRouter to participate in deliberation
+- **Select Chairman** — Choose one model to synthesize the final answer
+- **View Model Info** — See pricing, context length, and descriptions for each model
+
+Models are fetched live from OpenRouter's API. Filter by provider (OpenAI, Anthropic, Google, etc.).
+
+### Default Models (config file)
+
+Edit `backend/config.py` to change the default council:
+
+```python
+COUNCIL_MODELS = [
+    "openai/gpt-5.1",
+    "google/gemini-3-pro-preview",
+    "anthropic/claude-sonnet-4.5",
+    "x-ai/grok-4",
+]
+
+CHAIRMAN_MODEL = "google/gemini-3-pro-preview"
+```
+
+---
 
 ## Tech Stack
 
-- **Backend:** FastAPI (Python 3.10+), async httpx, OpenRouter API
-- **Frontend:** React + Vite, react-markdown for rendering
-- **Storage:** JSON files in `data/conversations/`
-- **Package Management:** uv for Python, npm for JavaScript
+| Component | Technology |
+|-----------|------------|
+| **Backend** | FastAPI, Python 3.10+, async httpx |
+| **Frontend** | React + Vite, react-markdown |
+| **API** | OpenRouter (unified LLM gateway) |
+| **Storage** | Local JSON files |
+| **Package Management** | uv (Python), npm (JavaScript) |
+
+---
+
+## Project Structure
+
+```
+LLM-Council-/
+├── backend/
+│   ├── config.py           # Model configuration
+│   ├── council.py          # 3-stage deliberation logic
+│   ├── main.py             # FastAPI endpoints
+│   ├── openrouter.py       # OpenRouter API client
+│   ├── storage.py          # Conversation persistence
+│   └── file_processing.py  # File upload handling
+├── frontend/
+│   └── src/
+│       ├── components/     # React components
+│       ├── api.js          # Backend API client
+│       └── utils/          # Utility functions
+├── data/                   # Conversation storage (gitignored)
+├── .env.example            # Environment template
+└── start.sh                # Launch script
+```
+
+---
+
+## Attribution
+
+This project is based on [llm-council](https://github.com/karpathy/llm-council) by [Andrej Karpathy](https://github.com/karpathy). The original is a "vibe-coded" Saturday hack for exploring multiple LLMs side by side.
+
+**Modifications in this fork:**
+- Dynamic model selection via UI (previously required editing config files)
+- Improved conversation persistence and navigation
+- Enhanced model metadata display (pricing, context length)
+
+---
+
+## License
+
+MIT License — see [LICENSE](LICENSE) for details.
+
+Original work © Andrej Karpathy. Modifications © 2025.
