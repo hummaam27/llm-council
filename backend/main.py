@@ -454,33 +454,32 @@ async def get_job(job_id: str):
 async def get_openrouter_models():
     """
     Fetch available models from OpenRouter API.
-    Filters for OpenAI, Anthropic, and Google models only.
+    Filters out non-chat models (image, audio, embedding, etc.).
     """
     all_models = await fetch_available_models()
     
-    # Filter for OpenAI, Anthropic, and Google models - chat/text only
+    # Filter for chat/text models only (exclude image, audio, embedding, etc.)
     filtered_models = []
     for model in all_models:
         model_id = model.get('id', '')
-        if model_id.startswith(('openai/', 'anthropic/', 'google/')):
-            # Skip non-chat models (image, audio, embedding, moderation, tts, whisper)
-            model_id_lower = model_id.lower()
-            if any(skip in model_id_lower for skip in [
-                'dall-e', 'image', 'vision', 'audio', 'whisper', 'tts', 
-                'embedding', 'embed', 'moderation', 'realtime'
-            ]):
-                continue
-            
-            # Extract provider from model ID
-            provider = model_id.split('/')[0]
-            filtered_models.append({
-                'id': model_id,
-                'name': model.get('name', model_id),
-                'provider': provider,
-                'context_length': model.get('context_length', 0),
-                'pricing': model.get('pricing', {}),
-                'description': model.get('description', '')
-            })
+        # Skip non-chat models (image, audio, embedding, moderation, tts, whisper)
+        model_id_lower = model_id.lower()
+        if any(skip in model_id_lower for skip in [
+            'dall-e', 'image', 'vision', 'audio', 'whisper', 'tts', 
+            'embedding', 'embed', 'moderation', 'realtime'
+        ]):
+            continue
+        
+        # Extract provider from model ID
+        provider = model_id.split('/')[0] if '/' in model_id else 'unknown'
+        filtered_models.append({
+            'id': model_id,
+            'name': model.get('name', model_id),
+            'provider': provider,
+            'context_length': model.get('context_length', 0),
+            'pricing': model.get('pricing', {}),
+            'description': model.get('description', '')
+        })
     
     return {'models': filtered_models}
 
