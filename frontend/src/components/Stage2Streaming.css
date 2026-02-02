@@ -1,4 +1,4 @@
-.stage1-streaming {
+.stage2-streaming {
   margin: 16px 0;
   border: 1px solid #e0e0e0;
   border-radius: 12px;
@@ -6,55 +6,33 @@
   background: #fff;
 }
 
-.streaming-header {
+.stage2-streaming .streaming-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 16px 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
   color: white;
 }
 
-.streaming-header h3 {
+.stage2-streaming .streaming-header h3 {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
 }
 
-.streaming-actions {
+.stage2-streaming .streaming-actions {
   display: flex;
   align-items: center;
   gap: 16px;
 }
 
-.streaming-summary {
+.stage2-streaming .streaming-summary {
   font-size: 14px;
   opacity: 0.9;
 }
 
-.force-continue-btn {
-  padding: 8px 16px;
-  background: rgba(255, 255, 255, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  border-radius: 6px;
-  color: white;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.force-continue-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.3);
-  border-color: rgba(255, 255, 255, 0.6);
-}
-
-.force-continue-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.model-tabs {
+.stage2-streaming .model-tabs {
   display: flex;
   gap: 4px;
   padding: 12px;
@@ -63,7 +41,7 @@
   overflow-x: auto;
 }
 
-.model-tab {
+.stage2-streaming .model-tab {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -79,44 +57,44 @@
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
-.model-tab:hover {
+.stage2-streaming .model-tab:hover {
   background: #f0f0f0;
 }
 
-.model-tab.active {
-  background: #667eea;
+.stage2-streaming .model-tab.active {
+  background: #f59e0b;
   color: white;
 }
 
-.model-tab.status-streaming {
+.stage2-streaming .model-tab.status-streaming {
   border-left: 3px solid #f59e0b;
 }
 
-.model-tab.status-complete {
+.stage2-streaming .model-tab.status-complete {
   border-left: 3px solid #10b981;
 }
 
-.model-tab.status-failed {
+.stage2-streaming .model-tab.status-failed {
   border-left: 3px solid #ef4444;
 }
 
-.model-tab.active.status-streaming,
-.model-tab.active.status-complete,
-.model-tab.active.status-failed {
+.stage2-streaming .model-tab.active.status-streaming,
+.stage2-streaming .model-tab.active.status-complete,
+.stage2-streaming .model-tab.active.status-failed {
   border-left-color: white;
 }
 
-.tab-status {
+.stage2-streaming .tab-status {
   font-size: 14px;
 }
 
-.tab-name {
+.stage2-streaming .tab-name {
   max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.tab-chars {
+.stage2-streaming .tab-chars {
   font-size: 11px;
   opacity: 0.7;
   background: rgba(0,0,0,0.1);
@@ -124,19 +102,19 @@
   border-radius: 10px;
 }
 
-.model-tab.active .tab-chars {
+.stage2-streaming .model-tab.active .tab-chars {
   background: rgba(255,255,255,0.2);
 }
 
-.model-content {
+.stage2-streaming .model-content {
   overflow-y: auto;
 }
 
-.stream-panel {
+.stage2-streaming .stream-panel {
   padding: 0;
 }
 
-.stream-header {
+.stage2-streaming .stream-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -145,13 +123,13 @@
   border-bottom: 1px solid #e0e0e0;
 }
 
-.model-name {
+.stage2-streaming .model-name {
   font-size: 13px;
   color: #666;
   font-family: monospace;
 }
 
-.stream-status {
+.stage2-streaming .stream-status {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -159,55 +137,33 @@
   font-weight: 500;
 }
 
-.stream-status.status-streaming {
+.stage2-streaming .stream-status.status-streaming {
   color: #f59e0b;
 }
 
-.stream-status.status-complete {
+.stage2-streaming .stream-status.status-complete {
   color: #10b981;
 }
 
-.stream-status.status-failed {
+.stage2-streaming .stream-status.status-failed {
   color: #ef4444;
 }
 
-.stream-header-right {
+.stage2-streaming .stream-header-right {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
-.skip-model-btn {
-  padding: 6px 12px;
-  background: #fee2e2;
-  border: 1px solid #fecaca;
-  border-radius: 6px;
-  color: #dc2626;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.skip-model-btn:hover:not(:disabled) {
-  background: #fecaca;
-  border-color: #f87171;
-}
-
-.skip-model-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.pulse-dot {
+.stage2-streaming .pulse-dot {
   width: 8px;
   height: 8px;
   background: #f59e0b;
   border-radius: 50%;
-  animation: pulse 1.5s ease-in-out infinite;
+  animation: stage2-pulse 1.5s ease-in-out infinite;
 }
 
-@keyframes pulse {
+@keyframes stage2-pulse {
   0%, 100% {
     opacity: 1;
     transform: scale(1);
@@ -218,50 +174,50 @@
   }
 }
 
-.stream-content {
+.stage2-streaming .stream-content {
   padding: 20px;
   font-size: 14px;
   line-height: 1.6;
 }
 
-.stream-content p {
+.stage2-streaming .stream-content p {
   margin: 0 0 12px 0;
 }
 
-.stream-content p:last-child {
+.stage2-streaming .stream-content p:last-child {
   margin-bottom: 0;
 }
 
-.waiting-message {
+.stage2-streaming .waiting-message {
   color: #999;
   font-style: italic;
   text-align: center;
   padding: 40px;
 }
 
-.typing-indicator {
+.stage2-streaming .typing-indicator {
   display: flex;
   gap: 4px;
   padding: 0 20px 16px;
 }
 
-.typing-indicator span {
+.stage2-streaming .typing-indicator span {
   width: 8px;
   height: 8px;
-  background: #667eea;
+  background: #f59e0b;
   border-radius: 50%;
-  animation: typing 1.4s ease-in-out infinite;
+  animation: stage2-typing 1.4s ease-in-out infinite;
 }
 
-.typing-indicator span:nth-child(2) {
+.stage2-streaming .typing-indicator span:nth-child(2) {
   animation-delay: 0.2s;
 }
 
-.typing-indicator span:nth-child(3) {
+.stage2-streaming .typing-indicator span:nth-child(3) {
   animation-delay: 0.4s;
 }
 
-@keyframes typing {
+@keyframes stage2-typing {
   0%, 60%, 100% {
     transform: translateY(0);
     opacity: 0.4;
@@ -272,8 +228,7 @@
   }
 }
 
-/* Resize handle */
-.resize-handle {
+.stage2-streaming .resize-handle {
   display: flex;
   justify-content: center;
   align-items: center;
@@ -284,17 +239,17 @@
   transition: background 0.2s;
 }
 
-.resize-handle:hover {
+.stage2-streaming .resize-handle:hover {
   background: #e0e0e0;
 }
 
-.resize-grip {
+.stage2-streaming .resize-grip {
   width: 40px;
   height: 4px;
   background: #ccc;
   border-radius: 2px;
 }
 
-.resize-handle:hover .resize-grip {
+.stage2-streaming .resize-handle:hover .resize-grip {
   background: #999;
 }

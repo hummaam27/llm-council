@@ -23,7 +23,7 @@ import json
 import asyncio
 
 from . import storage
-from .council import run_full_council, generate_conversation_title, stage1_collect_responses, stage1_collect_responses_streaming, stage2_collect_rankings, stage3_synthesize_final, calculate_aggregate_rankings
+from .council import run_full_council, generate_conversation_title, stage1_collect_responses, stage1_collect_responses_streaming, stage2_collect_rankings, stage2_collect_rankings_streaming, stage3_synthesize_final, stage3_synthesize_final_streaming, calculate_aggregate_rankings
 from .openrouter import fetch_available_models
 from . import config
 from .jobs import job_manager, JobStatus
@@ -113,6 +113,29 @@ async def cancel_job(job_id: str):
         raise HTTPException(status_code=404, detail="Job not found or already completed")
     logger.info(f"Job {job_id[:8]} cancelled by user")
     return {"success": True, "job_id": job_id, "message": "Job cancelled"}
+
+
+@app.post("/api/jobs/{job_id}/skip-model/{model:path}")
+async def skip_model(job_id: str, model: str):
+    """Skip a specific model during Stage 1. The model will be cancelled and marked as skipped."""
+    skipped = await job_manager.skip_model(job_id, model)
+    if not skipped:
+        raise HTTPException(status_code=400, detail="Cannot skip model - job not found or not in Stage 1")
+    logger.info(f"Job {job_id[:8]}: Model {model} skipped by user")
+    return {"success": True, "job_id": job_id, "model": model, "message": "Model skipped"}
+
+
+@app.post("/api/jobs/{job_id}/force-continue")
+async def force_continue(job_id: str):
+    """Force the job to continue to Stage 2 with whatever responses are available (minimum 1 required)."""
+    continued = await job_manager.force_continue_to_stage2(job_id)
+    if not continued:
+        raise HTTPException(
+            status_code=400, 
+            detail="Cannot force continue - job not found, not in Stage 1, or no models have completed"
+        )
+    logger.info(f"Job {job_id[:8]}: Force continuing to Stage 2")
+    return {"success": True, "job_id": job_id, "message": "Continuing to Stage 2"}
 
 
 @app.post("/api/conversations", response_model=Conversation)
@@ -236,53 +259,140 @@ async def run_council_job(job_id: str, conversation_id: str, user_query: str, is
                 await job_manager.update_model_stream(job_id, model, status='failed')
                 await job_manager.update_job_progress(job_id, model_failed=model)
         
-        stage1_results = await stage1_collect_responses_streaming(user_query, on_chunk, on_model_complete)
+        # Create callbacks for skip/force-continue checks
+        def should_skip_model(model: str) -> bool:
+            return job_manager.is_model_skipped(job_id, model)
+        
+        def should_force_continue() -> bool:
+            return job_manager.should_force_continue(job_id)
+        
+        stage1_results = await stage1_collect_responses_streaming(
+            user_query, 
+            on_chunk, 
+            on_model_complete,
+            should_skip_model,
+            should_force_continue
+        )
         logger.info(f"[Job {job_id[:8]}] ✓ STAGE 1 COMPLETE: Got {len(stage1_results)} responses")
         for r in stage1_results:
             logger.debug(f"  - {r['model']}: {len(r['response'])} chars")
+        
+        # Check if we got any responses - fail gracefully if not
+        if not stage1_results:
+            error_msg = "All models failed to respond. Please try again."
+            logger.error(f"[Job {job_id[:8]}] ✗ No responses collected")
+            await job_manager.fail_job(job_id, error_msg)
+            await job_manager.cleanup_job_state(job_id)
+            return
+        
         await job_manager.update_job_status(job_id, JobStatus.STAGE1_COMPLETE, stage1=stage1_results)
+        
+        # Save stage 1 results immediately to prevent data loss
+        storage.save_partial_assistant_message(conversation_id, stage1=stage1_results)
 
-        # Stage 2: Collect rankings
-        logger.info(f"[Job {job_id[:8]}] ▶ STAGE 2: Collecting peer rankings...")
-        await job_manager.update_job_status(job_id, JobStatus.STAGE2_RUNNING)
-        stage2_results, label_to_model = await stage2_collect_rankings(user_query, stage1_results)
-        aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_model)
-        logger.info(f"[Job {job_id[:8]}] ✓ STAGE 2 COMPLETE: Got {len(stage2_results)} rankings")
-        metadata = {
-            'label_to_model': label_to_model,
-            'aggregate_rankings': aggregate_rankings
-        }
-        await job_manager.update_job_status(
-            job_id, 
-            JobStatus.STAGE2_COMPLETE, 
-            stage2=stage2_results,
-            metadata=metadata
-        )
+        # Stage 2: Collect rankings (skip if only 1 response - nothing to rank)
+        if len(stage1_results) >= 2:
+            logger.info(f"[Job {job_id[:8]}] ▶ STAGE 2: Collecting peer rankings (streaming)...")
+            await job_manager.update_job_status(job_id, JobStatus.STAGE2_RUNNING)
+            
+            # Initialize stage2 streams for all models
+            models = config.get_council_models()
+            for model in models:
+                await job_manager.update_stage2_stream(job_id, model, status='streaming')
+            
+            async def on_stage2_chunk(model: str, chunk: str):
+                """Called for each chunk of text from a model during Stage 2."""
+                await job_manager.update_stage2_stream(job_id, model, content_chunk=chunk)
+            
+            async def on_stage2_model_complete(model: str, success: bool):
+                """Called when each model finishes Stage 2."""
+                if success:
+                    logger.info(f"[Job {job_id[:8]}] ✓ Stage 2: {model} complete")
+                    await job_manager.update_stage2_stream(job_id, model, status='complete')
+                else:
+                    logger.warning(f"[Job {job_id[:8]}] ✗ Stage 2: {model} failed")
+                    await job_manager.update_stage2_stream(job_id, model, status='failed')
+            
+            stage2_results, label_to_model = await stage2_collect_rankings_streaming(
+                user_query, 
+                stage1_results,
+                on_stage2_chunk,
+                on_stage2_model_complete
+            )
+            aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_model)
+            logger.info(f"[Job {job_id[:8]}] ✓ STAGE 2 COMPLETE: Got {len(stage2_results)} rankings")
+            metadata = {
+                'label_to_model': label_to_model,
+                'aggregate_rankings': aggregate_rankings
+            }
+            await job_manager.update_job_status(
+                job_id, 
+                JobStatus.STAGE2_COMPLETE, 
+                stage2=stage2_results,
+                metadata=metadata
+            )
+            
+            # Save stage 2 results immediately to prevent data loss
+            storage.save_partial_assistant_message(conversation_id, stage2=stage2_results, metadata=metadata)
+        else:
+            logger.info(f"[Job {job_id[:8]}] → Skipping Stage 2 (only {len(stage1_results)} response, nothing to rank)")
+            stage2_results = []
+            metadata = {
+                'label_to_model': {},
+                'aggregate_rankings': [],
+                'skipped_reason': 'insufficient_responses_for_ranking'
+            }
+            await job_manager.update_job_status(job_id, JobStatus.STAGE2_COMPLETE, stage2=[], metadata=metadata)
+            
+            # Save empty stage 2 with metadata
+            storage.save_partial_assistant_message(conversation_id, stage2=[], metadata=metadata)
 
-        # Stage 3: Synthesize final answer
-        logger.info(f"[Job {job_id[:8]}] ▶ STAGE 3: Synthesizing final answer...")
+        # Stage 3: Synthesize final answer with streaming
+        logger.info(f"[Job {job_id[:8]}] ▶ STAGE 3: Synthesizing final answer (streaming)...")
         await job_manager.update_job_status(job_id, JobStatus.STAGE3_RUNNING)
-        stage3_result = await stage3_synthesize_final(user_query, stage1_results, stage2_results)
+        
+        # Initialize stage3 stream
+        chairman = config.get_chairman_model()
+        await job_manager.update_stage3_stream(job_id, model=chairman, status='streaming')
+        
+        async def on_stage3_chunk(chunk: str):
+            """Called for each chunk of text from the chairman."""
+            await job_manager.update_stage3_stream(job_id, content_chunk=chunk)
+        
+        async def on_stage3_complete(success: bool):
+            """Called when the chairman finishes."""
+            if success:
+                logger.info(f"[Job {job_id[:8]}] ✓ Stage 3: Chairman complete")
+                await job_manager.update_stage3_stream(job_id, status='complete')
+            else:
+                logger.warning(f"[Job {job_id[:8]}] ✗ Stage 3: Chairman failed")
+                await job_manager.update_stage3_stream(job_id, status='failed')
+        
+        stage3_result = await stage3_synthesize_final_streaming(
+            user_query, 
+            stage1_results, 
+            stage2_results,
+            on_stage3_chunk,
+            on_stage3_complete
+        )
         logger.info(f"[Job {job_id[:8]}] ✓ STAGE 3 COMPLETE: Final response from {stage3_result.get('model', 'unknown')}")
         await job_manager.update_job_status(job_id, JobStatus.COMPLETE, stage3=stage3_result)
+        
+        # Save stage 3 results - this also marks the message as complete (removes _partial flag)
+        storage.save_partial_assistant_message(conversation_id, stage3=stage3_result)
 
-        # Wait for title generation if it was started
+        # Wait for title generation if it was started (non-critical, wrapped in try/except)
         if title_task:
-            title = await title_task
-            logger.debug(f"[Job {job_id[:8]}] Title generated: {title}")
-            storage.update_conversation_title(conversation_id, title)
+            try:
+                title = await title_task
+                logger.debug(f"[Job {job_id[:8]}] Title generated: {title}")
+                storage.update_conversation_title(conversation_id, title)
+            except Exception as title_error:
+                logger.warning(f"[Job {job_id[:8]}] Title generation failed (non-critical): {title_error}")
 
-        # Save complete assistant message to storage
-        storage.add_assistant_message(
-            conversation_id,
-            stage1_results,
-            stage2_results,
-            stage3_result,
-            metadata
-        )
-
-        # Mark job as complete
+        # Mark job as complete and clean up temporary state
         await job_manager.complete_job(job_id)
+        await job_manager.cleanup_job_state(job_id)
         logger.info(f"[Job {job_id[:8]}] ✓✓✓ JOB COMPLETE ✓✓✓")
 
     except Exception as e:
@@ -290,6 +400,7 @@ async def run_council_job(job_id: str, conversation_id: str, user_query: str, is
         import traceback
         logger.error(traceback.format_exc())
         await job_manager.fail_job(job_id, str(e))
+        await job_manager.cleanup_job_state(job_id)
 
 
 @app.post("/api/conversations/{conversation_id}/message/stream")
@@ -364,6 +475,16 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
                 if current_status == JobStatus.STAGE1_RUNNING:
                     progress = job.get("progress", {})
                     yield f"data: {json.dumps({'type': 'stage1_progress', 'progress': progress})}\n\n"
+                
+                # Send progress updates during stage2 (every poll)
+                if current_status == JobStatus.STAGE2_RUNNING:
+                    progress = job.get("progress", {})
+                    yield f"data: {json.dumps({'type': 'stage2_progress', 'progress': progress})}\n\n"
+                
+                # Send progress updates during stage3 (every poll)
+                if current_status == JobStatus.STAGE3_RUNNING:
+                    progress = job.get("progress", {})
+                    yield f"data: {json.dumps({'type': 'stage3_progress', 'progress': progress})}\n\n"
                 
                 # Send status change events
                 if current_status != last_status:

@@ -88,6 +88,23 @@ export default function CouncilModelSelector() {
     return model?.provider || 'unknown';
   };
 
+  const formatApiCost = (pricing) => {
+    if (!pricing) return 'API cost: N/A';
+
+    const prompt = Number.parseFloat(pricing.prompt);
+    const completion = Number.parseFloat(pricing.completion);
+
+    const hasPrompt = Number.isFinite(prompt) && prompt > 0;
+    const hasCompletion = Number.isFinite(completion) && completion > 0;
+
+    if (!hasPrompt && !hasCompletion) return 'API cost: N/A';
+
+    const parts = [];
+    if (hasPrompt) parts.push(`in $${(prompt * 1000000).toFixed(2)}/M`);
+    if (hasCompletion) parts.push(`out $${(completion * 1000000).toFixed(2)}/M`);
+    return `API cost: ${parts.join(' · ')}`;
+  };
+
   const providers = ['all', ...Array.from(new Set(allModels.map(m => m.provider))).sort()];
 
   const filteredModels = allModels.filter(model => {
@@ -278,7 +295,10 @@ export default function CouncilModelSelector() {
                     )}
                     <div className="item-info">
                       <span className="item-name">{model.name}</span>
-                      <span className="item-provider">{model.provider}</span>
+                      <div className="item-meta">
+                        <span className="item-provider">{model.provider}</span>
+                        <span className="item-cost">{formatApiCost(model.pricing)}</span>
+                      </div>
                     </div>
                   </div>
                 ))

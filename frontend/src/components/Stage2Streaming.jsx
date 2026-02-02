@@ -1,13 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { api } from '../api';
-import './Stage1Streaming.css';
+import './Stage2Streaming.css';
 
-export default function Stage1Streaming({ modelStreams, jobId }) {
+export default function Stage2Streaming({ modelStreams }) {
   const models = Object.keys(modelStreams || {});
   const [activeTab, setActiveTab] = useState(models[0] || null);
-  const [skippingModel, setSkippingModel] = useState(null);
-  const [forcingContinue, setForcingContinue] = useState(false);
   const [panelHeight, setPanelHeight] = useState(300);
   const isDragging = useRef(false);
   const startY = useRef(0);
@@ -52,31 +49,6 @@ export default function Stage1Streaming({ modelStreams, jobId }) {
     return null;
   }
 
-  const handleSkipModel = async (model) => {
-    if (!jobId || skippingModel) return;
-    setSkippingModel(model);
-    try {
-      await api.skipModel(jobId, model);
-    } catch (error) {
-      console.error('Failed to skip model:', error);
-    } finally {
-      setSkippingModel(null);
-    }
-  };
-
-  const handleForceContinue = async () => {
-    if (!jobId || forcingContinue) return;
-    setForcingContinue(true);
-    try {
-      await api.forceContinue(jobId);
-    } catch (error) {
-      console.error('Failed to force continue:', error);
-      alert(error.message);
-    } finally {
-      setForcingContinue(false);
-    }
-  };
-
   const getStatusIcon = (status) => {
     switch (status) {
       case 'streaming':
@@ -84,7 +56,6 @@ export default function Stage1Streaming({ modelStreams, jobId }) {
       case 'complete':
         return '✓';
       case 'failed':
-      case 'skipped':
         return '✗';
       default:
         return '○';
@@ -98,7 +69,6 @@ export default function Stage1Streaming({ modelStreams, jobId }) {
       case 'complete':
         return 'status-complete';
       case 'failed':
-      case 'skipped':
         return 'status-failed';
       default:
         return '';
@@ -107,33 +77,20 @@ export default function Stage1Streaming({ modelStreams, jobId }) {
 
   // Count completed and streaming models
   const completedCount = models.filter(m => modelStreams[m]?.status === 'complete').length;
-  const streamingCount = models.filter(m => modelStreams[m]?.status === 'streaming').length;
-  const canForceContinue = completedCount >= 1 && streamingCount > 0;
 
   const getModelShortName = (model) => {
-    // Extract just the model name without provider
     const parts = model.split('/');
     return parts[parts.length - 1];
   };
 
   return (
-    <div className="stage1-streaming">
+    <div className="stage2-streaming">
       <div className="streaming-header">
-        <h3>Stage 1: Individual Responses</h3>
+        <h3>Stage 2: Peer Rankings</h3>
         <div className="streaming-actions">
           <div className="streaming-summary">
             {completedCount} / {models.length} complete
           </div>
-          {canForceContinue && jobId && (
-            <button 
-              className="force-continue-btn"
-              onClick={handleForceContinue}
-              disabled={forcingContinue}
-              title="Continue to Stage 2 with available responses"
-            >
-              {forcingContinue ? 'Continuing...' : `Continue with ${completedCount} responses →`}
-            </button>
-          )}
         </div>
       </div>
 
@@ -167,23 +124,12 @@ export default function Stage1Streaming({ modelStreams, jobId }) {
                   {modelStreams[activeTab]?.status === 'streaming' && (
                     <>
                       <span className="pulse-dot"></span>
-                      Generating...
+                      Evaluating...
                     </>
                   )}
                   {modelStreams[activeTab]?.status === 'complete' && 'Complete'}
                   {modelStreams[activeTab]?.status === 'failed' && 'Failed'}
-                  {modelStreams[activeTab]?.status === 'skipped' && 'Skipped'}
                 </span>
-                {modelStreams[activeTab]?.status === 'streaming' && jobId && (
-                  <button
-                    className="skip-model-btn"
-                    onClick={() => handleSkipModel(activeTab)}
-                    disabled={skippingModel === activeTab}
-                    title="Skip this model and continue without it"
-                  >
-                    {skippingModel === activeTab ? 'Skipping...' : 'Skip'}
-                  </button>
-                )}
               </div>
             </div>
             <div className="stream-content">
@@ -193,9 +139,7 @@ export default function Stage1Streaming({ modelStreams, jobId }) {
                 <div className="waiting-message">
                   {modelStreams[activeTab]?.status === 'failed' 
                     ? 'Model failed to respond'
-                    : modelStreams[activeTab]?.status === 'skipped'
-                    ? 'Model was skipped'
-                    : 'Waiting for response...'}
+                    : 'Waiting for evaluation...'}
                 </div>
               )}
             </div>

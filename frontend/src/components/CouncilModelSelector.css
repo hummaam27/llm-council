@@ -334,6 +334,19 @@
   text-transform: capitalize;
 }
 
+ .item-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+ }
+
+ .item-cost {
+  font-size: 0.75rem;
+  color: #64748b;
+  white-space: nowrap;
+ }
+
 .dropdown-footer {
   display: flex;
   align-items: center;

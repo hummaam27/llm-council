@@ -1,0 +1,189 @@
+.stage3-streaming {
+  margin: 16px 0;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.stage3-streaming .streaming-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+}
+
+.stage3-streaming .streaming-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.stage3-streaming .streaming-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.stage3-streaming .streaming-summary {
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+.stage3-streaming .model-content {
+  overflow-y: auto;
+}
+
+.stage3-streaming .stream-panel {
+  padding: 0;
+}
+
+.stage3-streaming .stream-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  background: #fafafa;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.stage3-streaming .model-name {
+  font-size: 13px;
+  color: #666;
+  font-family: monospace;
+}
+
+.stage3-streaming .stream-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.stage3-streaming .stream-status.status-streaming {
+  color: #10b981;
+}
+
+.stage3-streaming .stream-status.status-complete {
+  color: #10b981;
+}
+
+.stage3-streaming .stream-status.status-failed {
+  color: #ef4444;
+}
+
+.stage3-streaming .stream-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.stage3-streaming .char-count {
+  font-size: 12px;
+  color: #888;
+  background: #f0f0f0;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.stage3-streaming .pulse-dot {
+  width: 8px;
+  height: 8px;
+  background: #10b981;
+  border-radius: 50%;
+  animation: stage3-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes stage3-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.2);
+  }
+}
+
+.stage3-streaming .stream-content {
+  padding: 20px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.stage3-streaming .stream-content p {
+  margin: 0 0 12px 0;
+}
+
+.stage3-streaming .stream-content p:last-child {
+  margin-bottom: 0;
+}
+
+.stage3-streaming .waiting-message {
+  color: #999;
+  font-style: italic;
+  text-align: center;
+  padding: 40px;
+}
+
+.stage3-streaming .typing-indicator {
+  display: flex;
+  gap: 4px;
+  padding: 0 20px 16px;
+}
+
+.stage3-streaming .typing-indicator span {
+  width: 8px;
+  height: 8px;
+  background: #10b981;
+  border-radius: 50%;
+  animation: stage3-typing 1.4s ease-in-out infinite;
+}
+
+.stage3-streaming .typing-indicator span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.stage3-streaming .typing-indicator span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes stage3-typing {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-8px);
+    opacity: 1;
+  }
+}
+
+.stage3-streaming .resize-handle {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 16px;
+  background: #f0f0f0;
+  border-top: 1px solid #e0e0e0;
+  cursor: ns-resize;
+  transition: background 0.2s;
+}
+
+.stage3-streaming .resize-handle:hover {
+  background: #e0e0e0;
+}
+
+.stage3-streaming .resize-grip {
+  width: 40px;
+  height: 4px;
+  background: #ccc;
+  border-radius: 2px;
+}
+
+.stage3-streaming .resize-handle:hover .resize-grip {
+  background: #999;
+}

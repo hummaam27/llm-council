@@ -10,52 +10,93 @@ async def stage1_collect_responses_streaming(
     user_query: str,
     on_chunk: Optional[Callable[[str, str], None]] = None,  # (model, chunk)
     on_model_complete: Optional[Callable[[str, bool], None]] = None,
+    should_skip_model: Optional[Callable[[str], bool]] = None,  # Check if model should be skipped
+    should_force_continue: Optional[Callable[[], bool]] = None,  # Check if we should stop early
 ) -> List[Dict[str, Any]]:
     """
     Stage 1: Collect individual responses from all council models with streaming.
+    Supports skipping individual models and early termination.
 
     Args:
         user_query: The user's question
         on_chunk: Optional callback(model_name, text_chunk) called for each chunk
         on_model_complete: Optional callback(model_name, success) called when each model finishes
+        should_skip_model: Optional callback(model_name) -> bool to check if model should be skipped
+        should_force_continue: Optional callback() -> bool to check if we should stop waiting
 
     Returns:
         List of dicts with 'model' and 'response' keys
     """
     messages = [{"role": "user", "content": user_query}]
     models = config.get_council_models()
+    results_dict = {}  # model -> response
     
     async def stream_with_callback(model: str) -> tuple:
-        """Stream a model and report progress. No timeout - let it run as long as needed."""
+        """Stream a model and report progress. Checks for skip signal."""
         try:
             async def chunk_handler(chunk: str):
+                # Check if this model was skipped
+                if should_skip_model and should_skip_model(model):
+                    raise asyncio.CancelledError("Model skipped by user")
                 if on_chunk:
                     await on_chunk(model, chunk)
             
-            # No timeout - let the model respond as long as it needs
             result = await stream_model(model, messages, chunk_handler)
             if on_model_complete:
                 await on_model_complete(model, result is not None)
             return (model, result)
+        except asyncio.CancelledError:
+            if on_model_complete:
+                await on_model_complete(model, False)
+            return (model, None)
         except Exception as e:
             if on_model_complete:
                 await on_model_complete(model, False)
             return (model, None)
     
-    # Stream all models in parallel
-    tasks = [stream_with_callback(model) for model in models]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    # Create tasks with model tracking
+    model_tasks = {model: asyncio.create_task(stream_with_callback(model)) for model in models}
+    pending = set(model_tasks.values())
+    
+    # Wait for tasks, checking for force-continue signal
+    while pending:
+        # Check if we should force continue
+        if should_force_continue and should_force_continue():
+            # Cancel remaining tasks
+            for task in pending:
+                task.cancel()
+            break
+        
+        # Wait for any task to complete (with short timeout to check signals)
+        done, pending = await asyncio.wait(pending, timeout=0.5, return_when=asyncio.FIRST_COMPLETED)
+        
+        # Process completed tasks
+        for task in done:
+            try:
+                model, response = task.result()
+                if response is not None:
+                    results_dict[model] = response
+            except Exception:
+                pass
+
+    # Wait briefly for cancelled tasks to clean up
+    if pending:
+        await asyncio.sleep(0.1)
+        for task in pending:
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
 
     # Format results
     stage1_results = []
-    for item in results:
-        if isinstance(item, Exception):
-            continue
-        model, response = item
-        if response is not None:
+    for model in models:
+        if model in results_dict:
             stage1_results.append({
                 "model": model,
-                "response": response.get('content', '')
+                "response": results_dict[model].get('content', '')
             })
 
     return stage1_results
@@ -106,19 +147,12 @@ async def stage1_collect_responses(
     return stage1_results
 
 
-async def stage2_collect_rankings(
-    user_query: str,
-    stage1_results: List[Dict[str, Any]]
-) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
+def _build_ranking_prompt(user_query: str, stage1_results: List[Dict[str, Any]]) -> Tuple[str, Dict[str, str]]:
     """
-    Stage 2: Each model ranks the anonymized responses.
-
-    Args:
-        user_query: The original user query
-        stage1_results: Results from Stage 1
-
+    Build the ranking prompt for Stage 2.
+    
     Returns:
-        Tuple of (rankings list, label_to_model mapping)
+        Tuple of (prompt string, label_to_model mapping)
     """
     # Create anonymized labels for responses (Response A, Response B, etc.)
     labels = [chr(65 + i) for i in range(len(stage1_results))]  # A, B, C, ...
@@ -166,6 +200,24 @@ FINAL RANKING:
 
 Now provide your evaluation and ranking:"""
 
+    return ranking_prompt, label_to_model
+
+
+async def stage2_collect_rankings(
+    user_query: str,
+    stage1_results: List[Dict[str, Any]]
+) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
+    """
+    Stage 2: Each model ranks the anonymized responses (non-streaming).
+
+    Args:
+        user_query: The original user query
+        stage1_results: Results from Stage 1
+
+    Returns:
+        Tuple of (rankings list, label_to_model mapping)
+    """
+    ranking_prompt, label_to_model = _build_ranking_prompt(user_query, stage1_results)
     messages = [{"role": "user", "content": ranking_prompt}]
 
     # Get rankings from all council models in parallel
@@ -186,21 +238,82 @@ Now provide your evaluation and ranking:"""
     return stage2_results, label_to_model
 
 
-async def stage3_synthesize_final(
+async def stage2_collect_rankings_streaming(
     user_query: str,
     stage1_results: List[Dict[str, Any]],
-    stage2_results: List[Dict[str, Any]]
-) -> Dict[str, Any]:
+    on_chunk: Optional[Callable[[str, str], None]] = None,  # (model, chunk)
+    on_model_complete: Optional[Callable[[str, bool], None]] = None,
+) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
     """
-    Stage 3: Chairman synthesizes final response.
+    Stage 2: Each model ranks the anonymized responses with streaming.
 
     Args:
         user_query: The original user query
-        stage1_results: Individual model responses from Stage 1
-        stage2_results: Rankings from Stage 2
+        stage1_results: Results from Stage 1
+        on_chunk: Optional callback(model_name, text_chunk) called for each chunk
+        on_model_complete: Optional callback(model_name, success) called when each model finishes
 
     Returns:
-        Dict with 'model' and 'response' keys
+        Tuple of (rankings list, label_to_model mapping)
+    """
+    ranking_prompt, label_to_model = _build_ranking_prompt(user_query, stage1_results)
+    messages = [{"role": "user", "content": ranking_prompt}]
+    models = config.get_council_models()
+    results_dict = {}  # model -> response content
+    
+    async def stream_with_callback(model: str) -> tuple:
+        """Stream a model and report progress."""
+        try:
+            async def chunk_handler(chunk: str):
+                if on_chunk:
+                    await on_chunk(model, chunk)
+            
+            result = await stream_model(model, messages, chunk_handler)
+            if on_model_complete:
+                await on_model_complete(model, result is not None)
+            return (model, result)
+        except Exception as e:
+            if on_model_complete:
+                await on_model_complete(model, False)
+            return (model, None)
+    
+    # Run all models in parallel with streaming
+    tasks = [stream_with_callback(model) for model in models]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    # Process results
+    for item in results:
+        if isinstance(item, Exception):
+            continue
+        model, response = item
+        if response is not None:
+            results_dict[model] = response.get('content', '')
+    
+    # Format results
+    stage2_results = []
+    for model in models:
+        if model in results_dict:
+            full_text = results_dict[model]
+            parsed = parse_ranking_from_text(full_text)
+            stage2_results.append({
+                "model": model,
+                "ranking": full_text,
+                "parsed_ranking": parsed
+            })
+
+    return stage2_results, label_to_model
+
+
+def _build_chairman_prompt(
+    user_query: str,
+    stage1_results: List[Dict[str, Any]],
+    stage2_results: List[Dict[str, Any]]
+) -> str:
+    """
+    Build the chairman prompt for Stage 3.
+    
+    Returns:
+        The prompt string
     """
     # Build comprehensive context for chairman
     stage1_text = "\n\n".join([
@@ -208,12 +321,29 @@ async def stage3_synthesize_final(
         for result in stage1_results
     ])
 
-    stage2_text = "\n\n".join([
-        f"Model: {result['model']}\nRanking: {result['ranking']}"
-        for result in stage2_results
-    ])
+    # Handle single response case - no peer rankings available
+    if len(stage1_results) == 1:
+        chairman_prompt = f"""You are the Chairman of an LLM Council. A single model has provided a response to the user's question.
 
-    chairman_prompt = f"""You are the Chairman of an LLM Council. Multiple AI models have provided responses to a user's question, and then ranked each other's responses.
+Original Question: {user_query}
+
+COUNCIL MEMBER RESPONSE:
+{stage1_text}
+
+Your task as Chairman is to review this response and provide a refined, comprehensive answer. Consider:
+- The strengths and weaknesses of the provided response
+- Any gaps or areas that could be improved
+- Providing additional context or clarification where helpful
+
+Provide a clear, well-reasoned final answer:"""
+    else:
+        # Multiple responses - include peer rankings
+        stage2_text = "\n\n".join([
+            f"Model: {result['model']}\nRanking: {result['ranking']}"
+            for result in stage2_results
+        ])
+
+        chairman_prompt = f"""You are the Chairman of an LLM Council. Multiple AI models have provided responses to a user's question, and then ranked each other's responses.
 
 Original Question: {user_query}
 
@@ -230,6 +360,26 @@ Your task as Chairman is to synthesize all of this information into a single, co
 
 Provide a clear, well-reasoned final answer that represents the council's collective wisdom:"""
 
+    return chairman_prompt
+
+
+async def stage3_synthesize_final(
+    user_query: str,
+    stage1_results: List[Dict[str, Any]],
+    stage2_results: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """
+    Stage 3: Chairman synthesizes final response (non-streaming).
+
+    Args:
+        user_query: The original user query
+        stage1_results: Individual model responses from Stage 1
+        stage2_results: Rankings from Stage 2 (may be empty if only 1 response)
+
+    Returns:
+        Dict with 'model' and 'response' keys
+    """
+    chairman_prompt = _build_chairman_prompt(user_query, stage1_results, stage2_results)
     messages = [{"role": "user", "content": chairman_prompt}]
 
     # Query the chairman model
@@ -247,6 +397,61 @@ Provide a clear, well-reasoned final answer that represents the council's collec
         "model": chairman,
         "response": response.get('content', '')
     }
+
+
+async def stage3_synthesize_final_streaming(
+    user_query: str,
+    stage1_results: List[Dict[str, Any]],
+    stage2_results: List[Dict[str, Any]],
+    on_chunk: Optional[Callable[[str], None]] = None,  # (chunk)
+    on_complete: Optional[Callable[[bool], None]] = None,
+) -> Dict[str, Any]:
+    """
+    Stage 3: Chairman synthesizes final response with streaming.
+
+    Args:
+        user_query: The original user query
+        stage1_results: Individual model responses from Stage 1
+        stage2_results: Rankings from Stage 2 (may be empty if only 1 response)
+        on_chunk: Optional callback(text_chunk) called for each chunk
+        on_complete: Optional callback(success) called when complete
+
+    Returns:
+        Dict with 'model' and 'response' keys
+    """
+    chairman_prompt = _build_chairman_prompt(user_query, stage1_results, stage2_results)
+    messages = [{"role": "user", "content": chairman_prompt}]
+
+    # Query the chairman model with streaming
+    chairman = config.get_chairman_model()
+    
+    try:
+        async def chunk_handler(chunk: str):
+            if on_chunk:
+                await on_chunk(chunk)
+        
+        response = await stream_model(chairman, messages, chunk_handler)
+        
+        if on_complete:
+            await on_complete(response is not None)
+        
+        if response is None:
+            return {
+                "model": chairman,
+                "response": "Error: Unable to generate final synthesis."
+            }
+        
+        return {
+            "model": chairman,
+            "response": response.get('content', '')
+        }
+    except Exception as e:
+        if on_complete:
+            await on_complete(False)
+        return {
+            "model": chairman,
+            "response": f"Error: {str(e)}"
+        }
 
 
 def parse_ranking_from_text(ranking_text: str) -> List[str]:
@@ -350,7 +555,7 @@ Title:"""
     messages = [{"role": "user", "content": title_prompt}]
 
     # Use gemini-2.5-flash for title generation (fast and cheap)
-    response = await query_model("google/gemini-2.5-flash", messages, timeout=30.0)
+    response = await query_model("google/gemini-2.5-flash", messages)
 
     if response is None:
         # Fallback to a generic title

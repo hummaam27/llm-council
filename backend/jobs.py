@@ -36,6 +36,10 @@ class JobManager:
         self._conversation_jobs: Dict[str, str] = {}
         # Lock for thread-safe operations
         self._lock = asyncio.Lock()
+        # Models that should be skipped (job_id -> set of model names)
+        self._skipped_models: Dict[str, set] = {}
+        # Flag to force continue to stage 2 (job_id -> bool)
+        self._force_continue: Dict[str, bool] = {}
         # Load persisted jobs on startup
         self._load_jobs()
     
@@ -105,6 +109,8 @@ class JobManager:
                     "models_pending": [],
                     "models_failed": [],
                     "model_streams": {},  # model -> {content: str, status: 'streaming'|'complete'|'failed'}
+                    "stage2_streams": {},  # model -> {content: str, status: 'streaming'|'complete'|'failed', char_count: int}
+                    "stage3_stream": {"content": "", "status": "pending", "char_count": 0, "model": ""},  # chairman streaming
                 },
             }
             
@@ -212,7 +218,7 @@ class JobManager:
         content_chunk: str = None,
         status: str = None,  # 'streaming', 'complete', 'failed'
     ):
-        """Update streaming content for a specific model."""
+        """Update streaming content for a specific model (Stage 1)."""
         async with self._lock:
             if job_id not in self._jobs:
                 return
@@ -231,6 +237,64 @@ class JobManager:
                 streams[model]["status"] = status
             
             # Don't save on every chunk - too expensive
+            # Only save on status changes
+            if status:
+                self._save_jobs()
+    
+    async def update_stage2_stream(
+        self,
+        job_id: str,
+        model: str,
+        content_chunk: str = None,
+        status: str = None,  # 'streaming', 'complete', 'failed'
+    ):
+        """Update streaming content for a specific model during Stage 2 (rankings)."""
+        async with self._lock:
+            if job_id not in self._jobs:
+                return
+            
+            job = self._jobs[job_id]
+            streams = job["progress"]["stage2_streams"]
+            
+            if model not in streams:
+                streams[model] = {"content": "", "status": "streaming", "char_count": 0}
+            
+            if content_chunk:
+                streams[model]["content"] += content_chunk
+                streams[model]["char_count"] = len(streams[model]["content"])
+            
+            if status:
+                streams[model]["status"] = status
+            
+            # Only save on status changes
+            if status:
+                self._save_jobs()
+    
+    async def update_stage3_stream(
+        self,
+        job_id: str,
+        model: str = None,
+        content_chunk: str = None,
+        status: str = None,  # 'streaming', 'complete', 'failed'
+    ):
+        """Update streaming content for Stage 3 (chairman synthesis)."""
+        async with self._lock:
+            if job_id not in self._jobs:
+                return
+            
+            job = self._jobs[job_id]
+            stream = job["progress"]["stage3_stream"]
+            
+            if model:
+                stream["model"] = model
+            
+            if content_chunk:
+                stream["content"] += content_chunk
+                stream["char_count"] = len(stream["content"])
+            
+            if status:
+                stream["status"] = status
+            
             # Only save on status changes
             if status:
                 self._save_jobs()
@@ -333,6 +397,94 @@ class JobManager:
             
             if to_remove:
                 self._save_jobs()
+
+    async def skip_model(self, job_id: str, model: str) -> bool:
+        """
+        Mark a model as skipped for a job.
+        Returns True if successful, False if job not found or not in stage1.
+        """
+        async with self._lock:
+            if job_id not in self._jobs:
+                return False
+            
+            job = self._jobs[job_id]
+            if job["status"] not in [JobStatus.STAGE1_RUNNING, JobStatus.PENDING]:
+                return False
+            
+            # Add to skipped models set
+            if job_id not in self._skipped_models:
+                self._skipped_models[job_id] = set()
+            self._skipped_models[job_id].add(model)
+            
+            # Update model stream status to 'skipped'
+            streams = job["progress"]["model_streams"]
+            if model in streams:
+                streams[model]["status"] = "skipped"
+            
+            # Add to failed list for tracking
+            if model not in job["progress"]["models_failed"]:
+                job["progress"]["models_failed"].append(model)
+            
+            job["updated_at"] = datetime.utcnow().isoformat()
+            self._save_jobs()
+            return True
+
+    def is_model_skipped(self, job_id: str, model: str) -> bool:
+        """Check if a model has been skipped. Thread-safe read."""
+        # Note: This is a simple read operation. The dict.get() is atomic in CPython
+        # and we're only reading, so this is safe without explicit locking.
+        skipped = self._skipped_models.get(job_id)
+        if skipped is None:
+            return False
+        return model in skipped
+
+    async def force_continue_to_stage2(self, job_id: str, min_required: int = 1) -> bool:
+        """
+        Force the job to continue to stage 2 with whatever responses are available.
+        
+        Args:
+            job_id: The job ID
+            min_required: Minimum number of completed responses required (default 1)
+            
+        Returns:
+            True if successful, False if job not found, not in stage1, or insufficient responses
+        """
+        async with self._lock:
+            if job_id not in self._jobs:
+                return False
+            
+            job = self._jobs[job_id]
+            if job["status"] != JobStatus.STAGE1_RUNNING:
+                return False
+            
+            # Check we have at least the minimum required completed responses
+            completed = len(job["progress"]["models_responded"])
+            if completed < min_required:
+                return False
+            
+            self._force_continue[job_id] = True
+            job["updated_at"] = datetime.utcnow().isoformat()
+            self._save_jobs()
+            return True
+
+    def should_force_continue(self, job_id: str) -> bool:
+        """Check if the job should force continue to stage 2. Thread-safe read."""
+        # Note: This is a simple read operation. The dict.get() is atomic in CPython.
+        return self._force_continue.get(job_id, False)
+
+    def get_completed_count(self, job_id: str) -> int:
+        """Get the number of completed model responses for a job."""
+        if job_id not in self._jobs:
+            return 0
+        return len(self._jobs[job_id]["progress"]["models_responded"])
+
+    async def cleanup_job_state(self, job_id: str):
+        """Clean up temporary state for a job (called when job completes)."""
+        async with self._lock:
+            if job_id in self._skipped_models:
+                del self._skipped_models[job_id]
+            if job_id in self._force_continue:
+                del self._force_continue[job_id]
 
 
 # Global job manager instance

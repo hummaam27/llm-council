@@ -263,6 +263,38 @@ export const api = {
   },
 
   /**
+   * Skip a specific model during Stage 1.
+   * @param {string} jobId - The job ID
+   * @param {string} model - The model ID to skip
+   * @returns {Promise<{success: boolean, job_id: string, model: string, message: string}>}
+   */
+  async skipModel(jobId, model) {
+    const response = await fetch(`${API_BASE}/api/jobs/${jobId}/skip-model/${encodeURIComponent(model)}`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      throw new Error('Failed to skip model');
+    }
+    return response.json();
+  },
+
+  /**
+   * Force continue to Stage 2 with available responses (minimum 2 required).
+   * @param {string} jobId - The job ID
+   * @returns {Promise<{success: boolean, job_id: string, message: string}>}
+   */
+  async forceContinue(jobId) {
+    const response = await fetch(`${API_BASE}/api/jobs/${jobId}/force-continue`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to force continue');
+    }
+    return response.json();
+  },
+
+  /**
    * Poll a job until it completes or errors.
    * @param {string} jobId - The job ID
    * @param {function} onUpdate - Callback for status updates: (job) => void

@@ -3,7 +3,9 @@ import ReactMarkdown from 'react-markdown';
 import Stage1 from './Stage1';
 import Stage1Streaming from './Stage1Streaming';
 import Stage2 from './Stage2';
+import Stage2Streaming from './Stage2Streaming';
 import Stage3 from './Stage3';
+import Stage3Streaming from './Stage3Streaming';
 import CouncilModelSelector from './CouncilModelSelector';
 import { exportConversationToPdf } from '../utils/exportPdf';
 import './ChatInterface.css';
@@ -82,19 +84,24 @@ export default function ChatInterface({
                   {msg.loading?.stage1 && msg.progress?.model_streams && (
                     <Stage1Streaming 
                       modelStreams={msg.progress.model_streams} 
-                      isLoading={true}
+                      jobId={activeJobId}
                     />
                   )}
                   {msg.stage1 && !msg.loading?.stage1 && <Stage1 responses={msg.stage1} />}
 
-                  {/* Stage 2 */}
-                  {msg.loading?.stage2 && (
+                  {/* Stage 2 - Show streaming view while loading, final view when complete */}
+                  {msg.loading?.stage2 && msg.progress?.stage2_streams && Object.keys(msg.progress.stage2_streams).length > 0 && (
+                    <Stage2Streaming 
+                      modelStreams={msg.progress.stage2_streams} 
+                    />
+                  )}
+                  {msg.loading?.stage2 && (!msg.progress?.stage2_streams || Object.keys(msg.progress.stage2_streams).length === 0) && (
                     <div className="stage-loading">
                       <div className="spinner"></div>
                       <span>Running Stage 2: Peer rankings...</span>
                     </div>
                   )}
-                  {msg.stage2 && (
+                  {msg.stage2 && !msg.loading?.stage2 && (
                     <Stage2
                       rankings={msg.stage2}
                       labelToModel={msg.metadata?.label_to_model}
@@ -102,14 +109,19 @@ export default function ChatInterface({
                     />
                   )}
 
-                  {/* Stage 3 */}
-                  {msg.loading?.stage3 && (
+                  {/* Stage 3 - Show streaming view while loading, final view when complete */}
+                  {msg.loading?.stage3 && msg.progress?.stage3_stream && msg.progress.stage3_stream.status !== 'pending' && (
+                    <Stage3Streaming 
+                      stream={msg.progress.stage3_stream} 
+                    />
+                  )}
+                  {msg.loading?.stage3 && (!msg.progress?.stage3_stream || msg.progress.stage3_stream.status === 'pending') && (
                     <div className="stage-loading">
                       <div className="spinner"></div>
                       <span>Running Stage 3: Final synthesis...</span>
                     </div>
                   )}
-                  {msg.stage3 && <Stage3 finalResponse={msg.stage3} />}
+                  {msg.stage3 && !msg.loading?.stage3 && <Stage3 finalResponse={msg.stage3} />}
                 </div>
               )}
             </div>

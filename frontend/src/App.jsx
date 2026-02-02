@@ -377,6 +377,17 @@ function App() {
             });
             break;
 
+          case 'stage2_progress':
+            // Update progress with streaming model content for stage 2
+            setCurrentConversation((prev) => {
+              const messages = [...prev.messages];
+              const lastMsg = messages[messages.length - 1];
+              lastMsg.progress = event.progress;
+              lastMsg.loading.stage2 = true;
+              return { ...prev, messages };
+            });
+            break;
+
           case 'stage2_complete':
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
@@ -392,6 +403,17 @@ function App() {
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
               const lastMsg = messages[messages.length - 1];
+              lastMsg.loading.stage3 = true;
+              return { ...prev, messages };
+            });
+            break;
+
+          case 'stage3_progress':
+            // Update progress with streaming content for stage 3
+            setCurrentConversation((prev) => {
+              const messages = [...prev.messages];
+              const lastMsg = messages[messages.length - 1];
+              lastMsg.progress = event.progress;
               lastMsg.loading.stage3 = true;
               return { ...prev, messages };
             });

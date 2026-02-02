@@ -178,6 +178,59 @@ def update_conversation_title(conversation_id: str, title: str):
     save_conversation(conversation)
 
 
+def save_partial_assistant_message(
+    conversation_id: str,
+    stage1: List[Dict[str, Any]] = None,
+    stage2: List[Dict[str, Any]] = None,
+    stage3: Dict[str, Any] = None,
+    metadata: Optional[Dict[str, Any]] = None
+):
+    """
+    Save or update a partial assistant message during council processing.
+    This allows saving progress incrementally so data isn't lost if later stages fail.
+
+    Args:
+        conversation_id: Conversation identifier
+        stage1: List of individual model responses (optional)
+        stage2: List of model rankings (optional)
+        stage3: Final synthesized response (optional)
+        metadata: Optional metadata including label_to_model mapping and aggregate_rankings
+    """
+    conversation = get_conversation(conversation_id)
+    if conversation is None:
+        raise ValueError(f"Conversation {conversation_id} not found")
+
+    # Check if the last message is an incomplete assistant message
+    messages = conversation["messages"]
+    if messages and messages[-1].get("role") == "assistant" and messages[-1].get("_partial", False):
+        # Update existing partial message
+        msg = messages[-1]
+        if stage1 is not None:
+            msg["stage1"] = stage1
+        if stage2 is not None:
+            msg["stage2"] = stage2
+        if stage3 is not None:
+            msg["stage3"] = stage3
+            # Mark as complete when stage3 is set
+            msg.pop("_partial", None)
+        if metadata is not None:
+            msg["metadata"] = metadata
+    else:
+        # Create new partial message
+        message = {
+            "role": "assistant",
+            "stage1": stage1 or [],
+            "stage2": stage2 or [],
+            "stage3": stage3 or {},
+            "_partial": True  # Mark as incomplete
+        }
+        if metadata:
+            message["metadata"] = metadata
+        messages.append(message)
+
+    save_conversation(conversation)
+
+
 def delete_conversation(conversation_id: str) -> bool:
     """
     Delete a conversation from storage.
