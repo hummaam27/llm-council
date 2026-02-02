@@ -480,13 +480,6 @@
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }
 
-/* Remove old model browser styles that are no longer needed */
-.model-filters,
-.model-list,
-.model-option,
-.more-models {
-  display: none;
-}
 
 .start-debate-btn {
   display: flex;

@@ -8,6 +8,7 @@ export default function CouncilModelSelector() {
   const [allModels, setAllModels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [providerFilter, setProviderFilter] = useState('all');
@@ -34,8 +35,10 @@ export default function CouncilModelSelector() {
       const config = await api.getCouncilConfig();
       setCouncilModels(config.council_models || []);
       setChairmanModel(config.chairman_model || '');
-    } catch (error) {
-      console.error('Failed to load council config:', error);
+      setError(null);
+    } catch (err) {
+      console.error('Failed to load council config:', err);
+      setError('Failed to load council configuration');
     } finally {
       setLoading(false);
     }
@@ -45,8 +48,9 @@ export default function CouncilModelSelector() {
     try {
       const data = await api.getOpenRouterModels();
       setAllModels(data.models || []);
-    } catch (error) {
-      console.error('Failed to load models:', error);
+    } catch (err) {
+      console.error('Failed to load models:', err);
+      setError('Failed to load available models');
     }
   };
 
@@ -63,11 +67,12 @@ export default function CouncilModelSelector() {
     setSaving(true);
     try {
       await api.updateCouncilConfig(newCouncilModels, newChairmanModel);
-      setCouncilModels(newCouncilModels);
-      setChairmanModel(newChairmanModel);
-    } catch (error) {
-      console.error('Failed to save council config:', error);
+      // State already updated by caller - no need to set again
+    } catch (err) {
+      console.error('Failed to save council config:', err);
       alert('Failed to save configuration. Please try again.');
+      // Reload to restore previous state on error
+      loadConfig();
     } finally {
       setSaving(false);
     }
@@ -87,18 +92,27 @@ export default function CouncilModelSelector() {
 
   const filteredModels = allModels.filter(model => {
     const matchesSearch = 
-      model.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      model.id.toLowerCase().includes(searchQuery.toLowerCase());
+      (model.name?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+      (model.id?.toLowerCase() || '').includes(searchQuery.toLowerCase());
     const matchesProvider = providerFilter === 'all' || model.provider === providerFilter;
     return matchesSearch && matchesProvider;
   });
 
   const toggleCouncilModel = (modelId) => {
-    const newModels = councilModels.includes(modelId)
+    const isRemoving = councilModels.includes(modelId);
+    const newModels = isRemoving
       ? councilModels.filter(id => id !== modelId)
       : [...councilModels, modelId];
+    
+    // If removing the chairman model, clear the chairman
+    let newChairman = chairmanModel;
+    if (isRemoving && modelId === chairmanModel) {
+      newChairman = '';
+      setChairmanModel('');
+    }
+    
     setCouncilModels(newModels);
-    handleSave(newModels, chairmanModel);
+    handleSave(newModels, newChairman);
   };
 
   const selectChairman = (modelId) => {
@@ -119,6 +133,22 @@ export default function CouncilModelSelector() {
       <div className="council-model-selector loading">
         <div className="spinner"></div>
         <span>Loading...</span>
+      </div>
+    );
+  }
+
+  if (error && allModels.length === 0) {
+    return (
+      <div className="council-model-selector">
+        <div className="selector-header">
+          <span className="selector-title">🏛️ Council Configuration</span>
+        </div>
+        <div className="error-message">
+          <span>⚠️ {error}</span>
+          <button className="retry-btn" onClick={() => { setLoading(true); setError(null); loadConfig(); loadModels(); }}>
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
