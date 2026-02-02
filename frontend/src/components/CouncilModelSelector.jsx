@@ -1,0 +1,271 @@
+import { useState, useEffect, useRef } from 'react';
+import { api } from '../api';
+import './CouncilModelSelector.css';
+
+export default function CouncilModelSelector() {
+  const [councilModels, setCouncilModels] = useState([]);
+  const [chairmanModel, setChairmanModel] = useState('');
+  const [allModels, setAllModels] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [providerFilter, setProviderFilter] = useState('all');
+  const [dropdownMode, setDropdownMode] = useState('council'); // 'council' or 'chairman'
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    loadConfig();
+    loadModels();
+  }, []);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const loadConfig = async () => {
+    try {
+      const config = await api.getCouncilConfig();
+      setCouncilModels(config.council_models || []);
+      setChairmanModel(config.chairman_model || '');
+    } catch (error) {
+      console.error('Failed to load council config:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadModels = async () => {
+    try {
+      const data = await api.getOpenRouterModels();
+      setAllModels(data.models || []);
+    } catch (error) {
+      console.error('Failed to load models:', error);
+    }
+  };
+
+  const handleSave = async (newCouncilModels, newChairmanModel) => {
+    if (newCouncilModels.length === 0) {
+      alert('Please select at least one council model');
+      return;
+    }
+    if (!newChairmanModel) {
+      alert('Please select a chairman model');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await api.updateCouncilConfig(newCouncilModels, newChairmanModel);
+      setCouncilModels(newCouncilModels);
+      setChairmanModel(newChairmanModel);
+    } catch (error) {
+      console.error('Failed to save council config:', error);
+      alert('Failed to save configuration. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const getModelName = (modelId) => {
+    const model = allModels.find(m => m.id === modelId);
+    return model?.name || modelId;
+  };
+
+  const getModelProvider = (modelId) => {
+    const model = allModels.find(m => m.id === modelId);
+    return model?.provider || 'unknown';
+  };
+
+  const providers = ['all', ...Array.from(new Set(allModels.map(m => m.provider))).sort()];
+
+  const filteredModels = allModels.filter(model => {
+    const matchesSearch = 
+      model.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      model.id.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesProvider = providerFilter === 'all' || model.provider === providerFilter;
+    return matchesSearch && matchesProvider;
+  });
+
+  const toggleCouncilModel = (modelId) => {
+    const newModels = councilModels.includes(modelId)
+      ? councilModels.filter(id => id !== modelId)
+      : [...councilModels, modelId];
+    setCouncilModels(newModels);
+    handleSave(newModels, chairmanModel);
+  };
+
+  const selectChairman = (modelId) => {
+    setChairmanModel(modelId);
+    handleSave(councilModels, modelId);
+    setShowDropdown(false);
+  };
+
+  const openDropdown = (mode) => {
+    setDropdownMode(mode);
+    setShowDropdown(true);
+    setSearchQuery('');
+    setProviderFilter('all');
+  };
+
+  if (loading) {
+    return (
+      <div className="council-model-selector loading">
+        <div className="spinner"></div>
+        <span>Loading...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="council-model-selector">
+      <div className="selector-header">
+        <span className="selector-title">🏛️ Council Configuration</span>
+        {saving && <span className="saving-indicator">Saving...</span>}
+      </div>
+
+      <div className="selector-content">
+        {/* Council Members */}
+        <div className="model-section">
+          <div className="section-label">Council Members ({councilModels.length})</div>
+          <div className="selected-models">
+            {councilModels.length === 0 ? (
+              <span className="no-selection">No models selected</span>
+            ) : (
+              councilModels.map(modelId => (
+                <span key={modelId} className="model-chip">
+                  {getModelName(modelId)}
+                  <button 
+                    className="remove-chip"
+                    onClick={() => toggleCouncilModel(modelId)}
+                    title="Remove"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))
+            )}
+            <button 
+              className="add-btn"
+              onClick={() => openDropdown('council')}
+            >
+              + Add
+            </button>
+          </div>
+        </div>
+
+        {/* Chairman */}
+        <div className="model-section">
+          <div className="section-label">Chairman</div>
+          <div className="selected-models">
+            {chairmanModel ? (
+              <span className="model-chip chairman">
+                {getModelName(chairmanModel)}
+              </span>
+            ) : (
+              <span className="no-selection">No chairman selected</span>
+            )}
+            <button 
+              className="add-btn"
+              onClick={() => openDropdown('chairman')}
+            >
+              {chairmanModel ? 'Change' : 'Select'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Dropdown Modal */}
+      {showDropdown && (
+        <div className="model-dropdown-overlay">
+          <div className="model-dropdown" ref={dropdownRef}>
+            <div className="dropdown-header">
+              <h3>{dropdownMode === 'council' ? 'Select Council Members' : 'Select Chairman'}</h3>
+              <button className="close-btn" onClick={() => setShowDropdown(false)}>×</button>
+            </div>
+
+            <div className="dropdown-filters">
+              <input
+                type="text"
+                placeholder="Search models..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="search-input"
+                autoFocus
+              />
+              <select
+                value={providerFilter}
+                onChange={(e) => setProviderFilter(e.target.value)}
+                className="provider-filter"
+              >
+                {providers.map(p => (
+                  <option key={p} value={p}>{p === 'all' ? 'All Providers' : p}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="dropdown-list">
+              {filteredModels.length === 0 ? (
+                <div className="no-results">No models found</div>
+              ) : (
+                filteredModels.map(model => (
+                  <div
+                    key={model.id}
+                    className={`dropdown-item ${
+                      dropdownMode === 'council' 
+                        ? (councilModels.includes(model.id) ? 'selected' : '')
+                        : (chairmanModel === model.id ? 'selected' : '')
+                    }`}
+                    onClick={() => {
+                      if (dropdownMode === 'council') {
+                        toggleCouncilModel(model.id);
+                      } else {
+                        selectChairman(model.id);
+                      }
+                    }}
+                  >
+                    {dropdownMode === 'council' && (
+                      <input
+                        type="checkbox"
+                        checked={councilModels.includes(model.id)}
+                        onChange={() => {}}
+                        readOnly
+                      />
+                    )}
+                    {dropdownMode === 'chairman' && (
+                      <input
+                        type="radio"
+                        checked={chairmanModel === model.id}
+                        onChange={() => {}}
+                        readOnly
+                      />
+                    )}
+                    <div className="item-info">
+                      <span className="item-name">{model.name}</span>
+                      <span className="item-provider">{model.provider}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {dropdownMode === 'council' && (
+              <div className="dropdown-footer">
+                <span>{councilModels.length} models selected</span>
+                <button className="done-btn" onClick={() => setShowDropdown(false)}>
+                  Done
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

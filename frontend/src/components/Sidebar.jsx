@@ -6,7 +6,6 @@ export default function Sidebar({
   currentConversationId,
   onSelectConversation,
   onNewConversation,
-  onOpenConfig,
   onDeleteConversation,
   activeMode,
   onModeChange,
@@ -22,14 +21,9 @@ export default function Sidebar({
     <div className="sidebar">
       <div className="sidebar-header">
         <h1>LLM Council</h1>
-        <div className="sidebar-actions">
-          <button className="config-btn" onClick={onOpenConfig} title="Configure Council">
-            ⚙️
-          </button>
-          <button className="new-conversation-btn" onClick={onNewConversation}>
-            + New
-          </button>
-        </div>
+        <button className="new-conversation-btn" onClick={onNewConversation}>
+          + New
+        </button>
       </div>
 
       <div className="mode-switcher">

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { api } from '../api';
 import './DebateSetup.css';
 
@@ -13,9 +13,21 @@ export default function DebateSetup({ onStartDebate, isDebating }) {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [providerFilter, setProviderFilter] = useState('all');
+  const [showModelDropdown, setShowModelDropdown] = useState(false);
+  const dropdownRef = useRef(null);
 
   useEffect(() => {
     loadData();
+  }, []);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowModelDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const loadData = async () => {
@@ -222,55 +234,93 @@ export default function DebateSetup({ onStartDebate, isDebating }) {
             ))}
           </div>
 
-          <div className="model-browser">
-            <div className="model-filters">
-              <input
-                type="text"
-                placeholder="Search models..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="model-search"
-                disabled={isDebating}
-              />
-              <select
-                value={providerFilter}
-                onChange={(e) => setProviderFilter(e.target.value)}
-                className="provider-select"
-                disabled={isDebating}
-              >
-                {providers.map(provider => (
-                  <option key={provider} value={provider}>
-                    {provider === 'all' ? 'All Providers' : provider}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className="model-selection-dropdown-container" ref={dropdownRef}>
+            <button
+              className="add-models-btn"
+              onClick={() => setShowModelDropdown(!showModelDropdown)}
+              disabled={isDebating}
+              type="button"
+            >
+              <span>+</span>
+              Add Models
+            </button>
 
-            <div className="model-list">
-              {filteredModels.slice(0, 20).map(model => (
-                <div
-                  key={model.id}
-                  className={`model-option ${selectedModels.includes(model.id) ? 'selected' : ''}`}
-                  onClick={() => !isDebating && handleToggleModel(model.id)}
-                >
-                  <div className="model-option-info">
-                    <span className="model-option-name">{model.name}</span>
-                    <span className="model-option-provider">{model.provider}</span>
-                    {model.pricing && (
-                      <span className="model-option-price">{formatPrice(model.pricing)}</span>
-                    )}
-                  </div>
-                  {selectedModels.includes(model.id) && (
-                    <span className="selected-check">✓</span>
+            {showModelDropdown && (
+              <div className="model-dropdown-modal">
+                <div className="model-dropdown-header">
+                  <h3>Select Models</h3>
+                  <button 
+                    className="close-dropdown"
+                    onClick={() => setShowModelDropdown(false)}
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <div className="model-dropdown-filters">
+                  <input
+                    type="text"
+                    placeholder="Search models..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="model-search"
+                  />
+                  <select
+                    value={providerFilter}
+                    onChange={(e) => setProviderFilter(e.target.value)}
+                    className="provider-select"
+                  >
+                    {providers.map(provider => (
+                      <option key={provider} value={provider}>
+                        {provider === 'all' ? 'All Providers' : provider}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="model-dropdown-list">
+                  {filteredModels.length === 0 ? (
+                    <div className="no-models">No models found</div>
+                  ) : (
+                    filteredModels.map(model => (
+                      <div
+                        key={model.id}
+                        className={`model-dropdown-option ${selectedModels.includes(model.id) ? 'selected' : ''}`}
+                        onClick={() => handleToggleModel(model.id)}
+                      >
+                        <div className="model-option-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={selectedModels.includes(model.id)}
+                            onChange={() => {}}
+                            readOnly
+                          />
+                        </div>
+                        <div className="model-option-info">
+                          <span className="model-option-name">{model.name}</span>
+                          <div className="model-option-meta">
+                            <span className="model-option-provider">{model.provider}</span>
+                            {model.pricing && (
+                              <span className="model-option-price">{formatPrice(model.pricing)}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))
                   )}
                 </div>
-              ))}
-              {filteredModels.length > 20 && (
-                <div className="more-models">
-                  +{filteredModels.length - 20} more models (refine search)
+
+                <div className="model-dropdown-footer">
+                  <span className="selected-count">{selectedModels.length} selected</span>
+                  <button
+                    className="done-btn"
+                    onClick={() => setShowModelDropdown(false)}
+                  >
+                    Done
+                  </button>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
 

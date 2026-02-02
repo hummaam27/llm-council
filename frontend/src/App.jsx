@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import ChatInterface from './components/ChatInterface';
-import CouncilConfig from './components/CouncilConfig';
 import DebateSetup from './components/DebateSetup';
 import DebateView from './components/DebateView';
 import { api } from './api';
@@ -12,7 +11,6 @@ function App() {
   const [currentConversationId, setCurrentConversationId] = useState(null);
   const [currentConversation, setCurrentConversation] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [showConfig, setShowConfig] = useState(false);
   const [activeJobId, setActiveJobId] = useState(null);
   const pollingRef = useRef(null);
   
@@ -163,14 +161,6 @@ function App() {
 
   const handleSelectConversation = (id) => {
     setCurrentConversationId(id);
-  };
-
-  const handleOpenConfig = () => {
-    setShowConfig(true);
-  };
-
-  const handleCloseConfig = () => {
-    setShowConfig(false);
   };
 
   const handleModeChange = (mode) => {
@@ -477,7 +467,6 @@ function App() {
         currentConversationId={currentConversationId}
         onSelectConversation={handleSelectConversation}
         onNewConversation={handleNewConversation}
-        onOpenConfig={handleOpenConfig}
         onDeleteConversation={handleDeleteConversation}
         activeMode={activeMode}
         onModeChange={handleModeChange}
@@ -516,10 +505,6 @@ function App() {
           )}
         </div>
       )}
-      <CouncilConfig
-        isOpen={showConfig}
-        onClose={handleCloseConfig}
-      />
     </div>
   );
 }
