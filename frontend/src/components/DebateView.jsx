@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
+import CostBadge from './CostBadge';
 import './DebateView.css';
 
 export default function DebateView({
   debateState,
   isDebating,
+  onStop,
 }) {
   const messagesEndRef = useRef(null);
 
@@ -16,15 +18,29 @@ export default function DebateView({
     return null;
   }
 
-  const { topic, participants, phase, turns, currentSpeaker, summary, moderatorDecision } = debateState;
+  const { topic, participants, phase, turns, currentSpeaker, summary, moderatorDecision, totalCost, stopReason } = debateState;
+
+  const stopReasonText = {
+    cost_limit: 'Debate ended — cost limit reached',
+    max_rounds: 'Debate ended — round limit reached',
+    concluded: 'Debate ended — the moderator concluded the discussion',
+  };
 
   return (
     <div className="debate-view">
+      {isDebating && (
+        <button className="run-stop-btn" onClick={onStop}>
+          Stop Debate
+        </button>
+      )}
       {/* Debate Header */}
       <div className="debate-header">
         <div className="debate-topic">
           <span className="topic-label">Debate Topic</span>
           <h2>{topic}</h2>
+        </div>
+        <div className="debate-cost">
+          <CostBadge total={totalCost || 0} />
         </div>
         {participants && participants.length > 0 && (
           <div className="debate-participants">
@@ -35,7 +51,6 @@ export default function DebateView({
                   key={p.id}
                   className={`participant-chip ${currentSpeaker === p.id ? 'speaking' : ''}`}
                 >
-                  {currentSpeaker === p.id && <span className="speaking-indicator">🎤</span>}
                   {p.name}
                 </span>
               ))}
@@ -48,9 +63,9 @@ export default function DebateView({
       {phase && (
         <div className="debate-phase">
           <span className={`phase-badge ${phase}`}>
-            {phase === 'opening_statements' && '📢 Opening Statements'}
-            {phase === 'discussion' && '💬 Discussion'}
-            {phase === 'conclusion' && '📝 Conclusion'}
+            {phase === 'opening_statements' && 'Opening Statements'}
+            {phase === 'discussion' && 'Discussion'}
+            {phase === 'conclusion' && 'Conclusion'}
           </span>
         </div>
       )}
@@ -68,9 +83,9 @@ export default function DebateView({
               </div>
               <span className="speaker-name">{turn.name}</span>
               <span className={`turn-type-badge ${turn.turn_type}`}>
-                {turn.turn_type === 'opening' && '📢 Opening'}
-                {turn.turn_type === 'discussion' && '💬 Response'}
-                {turn.turn_type === 'summary' && '📋 Summary'}
+                {turn.turn_type === 'opening' && 'Opening'}
+                {turn.turn_type === 'discussion' && 'Response'}
+                {turn.turn_type === 'summary' && 'Summary'}
               </span>
             </div>
             <div className="speech-bubble">
@@ -98,7 +113,6 @@ export default function DebateView({
         {/* Moderator Decision */}
         {moderatorDecision && !moderatorDecision.continue && (
           <div className="moderator-note">
-            <span className="moderator-icon">👨‍⚖️</span>
             <span>Moderator: {moderatorDecision.reason || 'The discussion has reached its conclusion.'}</span>
           </div>
         )}
@@ -110,7 +124,6 @@ export default function DebateView({
       {summary && (
         <div className="debate-summary">
           <div className="summary-header">
-            <span className="summary-icon">📋</span>
             <h3>Moderator's Summary</h3>
           </div>
           <div className="summary-content">
@@ -124,6 +137,11 @@ export default function DebateView({
         <div className="debate-status">
           <div className="status-pulse"></div>
           <span>Debate in progress...</span>
+        </div>
+      )}
+      {!isDebating && stopReason && (
+        <div className="debate-status debate-status-done">
+          <span>{stopReasonText[stopReason] || 'Debate ended'}</span>
         </div>
       )}
     </div>

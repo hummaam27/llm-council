@@ -3,6 +3,7 @@
 from typing import List, Dict, Any, AsyncGenerator, Optional
 import json
 from .openrouter import query_model
+from .cost import extract_cost, warm_pricing_cache
 from . import config
 
 # Predefined adversarial roles to prevent echo chambers
@@ -49,7 +50,8 @@ async def run_debate(
     moderator_model: str = None,
     max_turns: int = 12,
     attachments: List[Dict[str, Any]] = None,
-    roles: Optional[List[str]] = None
+    roles: Optional[List[str]] = None,
+    cost_limit: float = 10.0,
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """
     Run a live debate where models respond to each other.
@@ -71,7 +73,10 @@ async def run_debate(
     Yields events as the debate progresses for real-time streaming.
     """
     moderator = moderator_model or config.get_chairman_model()
-    
+
+    await warm_pricing_cache()
+    total_cost = 0.0
+
     # Build context from attachments if any
     context = ""
     if attachments:
@@ -126,6 +131,9 @@ async def run_debate(
     yield {"type": "phase", "phase": "opening_statements"}
     
     for model_id in debate_models:
+        # Even opening statements respect the hard cost limit.
+        if total_cost >= cost_limit:
+            break
         role = model_roles.get(model_id)
         role_instruction = ""
         if role:
@@ -148,27 +156,32 @@ Speak naturally as if in a live discussion."""
         
         response = await query_model(model_id, [{"role": "user", "content": opening_prompt}])
         content = response.get('content', 'Unable to respond.') if response else 'Unable to respond.'
-        
+        call_cost = extract_cost(response, model_id)['cost']
+        total_cost += call_cost
+
         debate_history.append({
             "speaker": model_names[model_id],
             "model": model_id,
             "content": content,
             "type": "opening"
         })
-        
+
         yield {
             "type": "speaker_complete",
             "model": model_id,
             "name": model_names[model_id],
             "content": content,
-            "turn_type": "opening"
+            "turn_type": "opening",
+            "cost": call_cost,
+            "total_cost": total_cost,
         }
     
     # Main debate loop - moderator selects speakers
     yield {"type": "phase", "phase": "discussion"}
     
     turn = 0
-    while turn < max_turns:
+    moderator_ended = False
+    while turn < max_turns and total_cost < cost_limit:
         # Ask moderator who should speak next and if debate should continue
         history_text = "\n\n".join([
             f"**{h['speaker']}**: {h['content']}" for h in debate_history
@@ -192,6 +205,8 @@ If the discussion has covered the topic well, key points have been made, and con
 
         mod_response = await query_model(moderator, [{"role": "user", "content": moderator_prompt}])
         mod_content = mod_response.get('content', '') if mod_response else ''
+        mod_cost = extract_cost(mod_response, moderator)['cost']
+        total_cost += mod_cost
         
         # Parse moderator decision
         try:
@@ -207,10 +222,13 @@ If the discussion has covered the topic well, key points have been made, and con
         
         yield {
             "type": "moderator_decision",
-            "decision": decision
+            "decision": decision,
+            "cost": mod_cost,
+            "total_cost": total_cost,
         }
         
         if not decision.get("continue", True):
+            moderator_ended = True
             break
         
         # Find the model ID for the selected speaker
@@ -253,24 +271,36 @@ If you agree with someone, say so briefly and add something new. Have your own v
         
         response = await query_model(next_model, [{"role": "user", "content": speaker_prompt}])
         content = response.get('content', 'Unable to respond.') if response else 'Unable to respond.'
-        
+        call_cost = extract_cost(response, next_model)['cost']
+        total_cost += call_cost
+
         debate_history.append({
             "speaker": model_names[next_model],
             "model": next_model,
             "content": content,
             "type": "discussion"
         })
-        
+
         yield {
             "type": "speaker_complete",
             "model": next_model,
             "name": model_names[next_model],
             "content": content,
-            "turn_type": "discussion"
+            "turn_type": "discussion",
+            "cost": call_cost,
+            "total_cost": total_cost,
         }
         
         turn += 1
-    
+
+    # Why did the discussion stop?
+    if total_cost >= cost_limit:
+        stop_reason = "cost_limit"
+    elif moderator_ended:
+        stop_reason = "concluded"
+    else:
+        stop_reason = "max_rounds"
+
     # Final summary from moderator
     yield {"type": "phase", "phase": "conclusion"}
     
@@ -295,15 +325,22 @@ Be fair to all participants and their viewpoints."""
     
     summary_response = await query_model(moderator, [{"role": "user", "content": summary_prompt}])
     summary = summary_response.get('content', 'Unable to generate summary.') if summary_response else 'Unable to generate summary.'
-    
+    summary_cost = extract_cost(summary_response, moderator)['cost']
+    total_cost += summary_cost
+
     yield {
         "type": "summary_complete",
         "moderator": moderator,
-        "summary": summary
+        "summary": summary,
+        "cost": summary_cost,
+        "total_cost": total_cost,
     }
-    
+
     yield {
         "type": "debate_complete",
         "total_turns": len(debate_history),
-        "participants": list(model_names.values())
+        "participants": list(model_names.values()),
+        "total_cost": total_cost,
+        "stop_reason": stop_reason,
+        "cost_limit": cost_limit,
     }

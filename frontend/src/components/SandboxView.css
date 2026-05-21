@@ -1,0 +1,231 @@
+.sandbox-view {
+  flex: 1;
+  display: flex;
+  gap: 20px;
+  padding: 24px;
+  overflow: auto;
+}
+
+.sandbox-canvas-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.sandbox-status {
+  font-size: 0.9rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sandbox-running {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent);
+}
+
+.pulse-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
+}
+
+.sandbox-done {
+  color: var(--teal);
+}
+
+.sandbox-game {
+  width: 820px;
+  height: 820px;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+  cursor: grab;
+}
+
+.sandbox-game:active {
+  cursor: grabbing;
+}
+
+.sandbox-hint {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.sandbox-game canvas {
+  display: block;
+  border-radius: 10px;
+}
+
+.sandbox-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.82rem;
+  color: #475569;
+}
+
+.legend-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1.5px solid #fff;
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.sandbox-log-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sandbox-log-panel h3 {
+  margin: 0 0 10px;
+  font-size: 1rem;
+  color: #1e293b;
+}
+
+.sandbox-log {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.log-empty {
+  color: #94a3b8;
+  font-style: italic;
+  text-align: center;
+  padding: 20px;
+}
+
+.log-entry {
+  display: flex;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.log-entry:nth-child(odd) {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.log-tick {
+  flex-shrink: 0;
+  font-weight: 700;
+  color: var(--accent);
+  font-size: 0.78rem;
+}
+
+.log-text {
+  color: #334155;
+}
+
+.log-talk .log-text {
+  color: #1e293b;
+  font-weight: 500;
+}
+
+.log-move .log-text {
+  color: #64748b;
+}
+
+.log-act .log-text {
+  color: #b45309;
+  font-weight: 500;
+}
+
+.log-work .log-text,
+.log-give .log-text {
+  color: var(--teal-deep);
+  font-weight: 600;
+}
+
+.treasury-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--teal-soft);
+  border: 1px solid var(--teal);
+  color: var(--teal-deep);
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.sandbox-standings {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+
+.sandbox-standings h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.standing-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: 0.9rem;
+}
+
+.standing-row + .standing-row {
+  border-top: 1px solid var(--border);
+}
+
+.standing-rank {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.standing-name {
+  flex: 1;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.standing-coins {
+  color: var(--teal-deep);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}

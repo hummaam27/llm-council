@@ -96,7 +96,8 @@ async def stage1_collect_responses_streaming(
         if model in results_dict:
             stage1_results.append({
                 "model": model,
-                "response": results_dict[model].get('content', '')
+                "response": results_dict[model].get('content', ''),
+                "usage": results_dict[model].get('usage'),
             })
 
     return stage1_results
@@ -141,7 +142,8 @@ async def stage1_collect_responses(
         if response is not None:
             stage1_results.append({
                 "model": model,
-                "response": response.get('content', '')
+                "response": response.get('content', ''),
+                "usage": response.get('usage'),
             })
 
     return stage1_results
@@ -232,7 +234,8 @@ async def stage2_collect_rankings(
             stage2_results.append({
                 "model": model,
                 "ranking": full_text,
-                "parsed_ranking": parsed
+                "parsed_ranking": parsed,
+                "usage": response.get('usage'),
             })
 
     return stage2_results, label_to_model
@@ -287,18 +290,19 @@ async def stage2_collect_rankings_streaming(
             continue
         model, response = item
         if response is not None:
-            results_dict[model] = response.get('content', '')
-    
+            results_dict[model] = response
+
     # Format results
     stage2_results = []
     for model in models:
         if model in results_dict:
-            full_text = results_dict[model]
+            full_text = results_dict[model].get('content', '')
             parsed = parse_ranking_from_text(full_text)
             stage2_results.append({
                 "model": model,
                 "ranking": full_text,
-                "parsed_ranking": parsed
+                "parsed_ranking": parsed,
+                "usage": results_dict[model].get('usage'),
             })
 
     return stage2_results, label_to_model
@@ -390,12 +394,14 @@ async def stage3_synthesize_final(
         # Fallback if chairman fails
         return {
             "model": chairman,
-            "response": "Error: Unable to generate final synthesis."
+            "response": "Error: Unable to generate final synthesis.",
+            "usage": None,
         }
 
     return {
         "model": chairman,
-        "response": response.get('content', '')
+        "response": response.get('content', ''),
+        "usage": response.get('usage'),
     }
 
 
@@ -438,19 +444,22 @@ async def stage3_synthesize_final_streaming(
         if response is None:
             return {
                 "model": chairman,
-                "response": "Error: Unable to generate final synthesis."
+                "response": "Error: Unable to generate final synthesis.",
+                "usage": None,
             }
-        
+
         return {
             "model": chairman,
-            "response": response.get('content', '')
+            "response": response.get('content', ''),
+            "usage": response.get('usage'),
         }
     except Exception as e:
         if on_complete:
             await on_complete(False)
         return {
             "model": chairman,
-            "response": f"Error: {str(e)}"
+            "response": f"Error: {str(e)}",
+            "usage": None,
         }
 
 
@@ -535,7 +544,7 @@ def calculate_aggregate_rankings(
     return aggregate
 
 
-async def generate_conversation_title(user_query: str) -> str:
+async def generate_conversation_title(user_query: str) -> Dict[str, Any]:
     """
     Generate a short title for a conversation based on the first user message.
 
@@ -543,7 +552,7 @@ async def generate_conversation_title(user_query: str) -> str:
         user_query: The first user message
 
     Returns:
-        A short title (3-5 words)
+        Dict with 'title' (3-5 words) and 'usage' (OpenRouter usage or None)
     """
     title_prompt = f"""Generate a very short title (3-5 words maximum) that summarizes the following question.
 The title should be concise and descriptive. Do not use quotes or punctuation in the title.
@@ -559,7 +568,7 @@ Title:"""
 
     if response is None:
         # Fallback to a generic title
-        return "New Conversation"
+        return {"title": "New Conversation", "usage": None}
 
     title = response.get('content', 'New Conversation').strip()
 
@@ -570,7 +579,7 @@ Title:"""
     if len(title) > 50:
         title = title[:47] + "..."
 
-    return title
+    return {"title": title, "usage": response.get('usage')}
 
 
 async def run_full_council(user_query: str) -> Tuple[List, List, Dict, Dict]:

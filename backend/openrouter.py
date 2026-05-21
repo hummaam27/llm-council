@@ -66,7 +66,8 @@ async def query_model(
 
             return {
                 'content': content,
-                'reasoning_details': message.get('reasoning_details')
+                'reasoning_details': message.get('reasoning_details'),
+                'usage': data.get('usage'),
             }
 
     except httpx.TimeoutException:
@@ -159,7 +160,8 @@ async def stream_model(
     }
 
     full_content = ""
-    
+    usage = None
+
     try:
         logger.info(f"  → Streaming {model}...")
         # No timeout - let models respond as long as they need
@@ -195,17 +197,22 @@ async def stream_model(
                             data = json.loads(data_str)
                             delta = data.get('choices', [{}])[0].get('delta', {})
                             content = delta.get('content', '')
-                            
+
                             if content:
                                 full_content += content
                                 await on_chunk(content)
-                                
+
+                            # Usage arrives in the final chunk before [DONE]
+                            # (a chunk with empty choices) — keep looping.
+                            if data.get('usage'):
+                                usage = data['usage']
+
                         except json.JSONDecodeError:
                             # Ignore malformed chunks
                             pass
-        
+
         logger.info(f"  ← {model} streamed ({len(full_content)} chars)")
-        return {'content': full_content}
+        return {'content': full_content, 'usage': usage}
         
     except httpx.TimeoutException:
         logger.error(f"  ✗ {model} CONNECTION TIMEOUT (server unreachable)")

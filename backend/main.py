@@ -26,8 +26,10 @@ from . import storage
 from .council import run_full_council, generate_conversation_title, stage1_collect_responses, stage1_collect_responses_streaming, stage2_collect_rankings, stage2_collect_rankings_streaming, stage3_synthesize_final, stage3_synthesize_final_streaming, calculate_aggregate_rankings
 from .openrouter import fetch_available_models
 from . import config
+from . import cost
 from .jobs import job_manager, JobStatus
 from .debate import run_debate, DEBATE_ROLES
+from .sandbox import run_simulation, AGENT_CAP, MIN_AGENTS, MAX_TICKS
 
 app = FastAPI(title="LLM Council API")
 
@@ -74,6 +76,22 @@ class StartDebateRequest(BaseModel):
     models: List[str]
     max_turns: int = 6
     roles: Optional[List[str]] = None
+    cost_limit: float = 10.0
+
+
+class SandboxAgentSpec(BaseModel):
+    """A single user-defined agent for a sandbox simulation."""
+    name: str
+    backstory: str = ""
+    personality: str = ""
+    goal: str = ""
+    model: str
+
+
+class StartSandboxRequest(BaseModel):
+    """Request to start a sandbox simulation."""
+    agents: List[SandboxAgentSpec]
+    max_ticks: int = 15
 
 
 class ConversationMetadata(BaseModel):
@@ -191,8 +209,8 @@ async def send_message(conversation_id: str, request: SendMessageRequest):
 
     # If this is the first message, generate a title
     if is_first_message:
-        title = await generate_conversation_title(request.content)
-        storage.update_conversation_title(conversation_id, title)
+        title_result = await generate_conversation_title(request.content)
+        storage.update_conversation_title(conversation_id, title_result['title'])
 
     # Run the 3-stage council process
     stage1_results, stage2_results, stage3_result, metadata = await run_full_council(
@@ -235,7 +253,20 @@ async def run_council_job(job_id: str, conversation_id: str, user_query: str, is
         # Stage 1: Collect responses with streaming
         logger.info(f"[Job {job_id[:8]}] ▶ STAGE 1: Collecting individual responses (streaming)...")
         await job_manager.update_job_status(job_id, JobStatus.STAGE1_RUNNING)
-        
+
+        # Warm the pricing cache for cost estimation fallback
+        await cost.warm_pricing_cache()
+
+        async def bank_cost(result):
+            """Accumulate the cost of one model call into the job."""
+            if not result:
+                return
+            info = cost.extract_cost(result, result.get('model'))
+            await job_manager.add_cost(
+                job_id, info['cost'], info['prompt_tokens'],
+                info['completion_tokens'], info['estimated'],
+            )
+
         # Set up progress tracking
         models = config.get_council_models()
         await job_manager.update_job_progress(job_id, models_total=len(models))
@@ -276,6 +307,7 @@ async def run_council_job(job_id: str, conversation_id: str, user_query: str, is
         logger.info(f"[Job {job_id[:8]}] ✓ STAGE 1 COMPLETE: Got {len(stage1_results)} responses")
         for r in stage1_results:
             logger.debug(f"  - {r['model']}: {len(r['response'])} chars")
+            await bank_cost(r)
         
         # Check if we got any responses - fail gracefully if not
         if not stage1_results:
@@ -321,6 +353,8 @@ async def run_council_job(job_id: str, conversation_id: str, user_query: str, is
             )
             aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_model)
             logger.info(f"[Job {job_id[:8]}] ✓ STAGE 2 COMPLETE: Got {len(stage2_results)} rankings")
+            for r in stage2_results:
+                await bank_cost(r)
             metadata = {
                 'label_to_model': label_to_model,
                 'aggregate_rankings': aggregate_rankings
@@ -376,6 +410,7 @@ async def run_council_job(job_id: str, conversation_id: str, user_query: str, is
             on_stage3_complete
         )
         logger.info(f"[Job {job_id[:8]}] ✓ STAGE 3 COMPLETE: Final response from {stage3_result.get('model', 'unknown')}")
+        await bank_cost(stage3_result)
         await job_manager.update_job_status(job_id, JobStatus.COMPLETE, stage3=stage3_result)
         
         # Save stage 3 results - this also marks the message as complete (removes _partial flag)
@@ -384,7 +419,9 @@ async def run_council_job(job_id: str, conversation_id: str, user_query: str, is
         # Wait for title generation if it was started (non-critical, wrapped in try/except)
         if title_task:
             try:
-                title = await title_task
+                title_result = await title_task
+                title = title_result['title']
+                await bank_cost(title_result)
                 logger.debug(f"[Job {job_id[:8]}] Title generated: {title}")
                 storage.update_conversation_title(conversation_id, title)
             except Exception as title_error:
@@ -511,7 +548,8 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
                     elif current_status == JobStatus.COMPLETE:
                         logger.info(f"[Stream {job_id[:8]}] Sending stage3_complete and complete events")
                         yield f"data: {json.dumps({'type': 'stage3_complete', 'data': job['stage3']})}\n\n"
-                        yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+                        cost_summary = job.get('progress', {}).get('cost', {})
+                        yield f"data: {json.dumps({'type': 'complete', 'cost': cost_summary})}\n\n"
                         break
                     
                     elif current_status == JobStatus.ERROR:
@@ -663,9 +701,15 @@ async def start_debate(request: StartDebateRequest):
     
     if request.max_turns < 1:
         raise HTTPException(status_code=400, detail="max_turns must be at least 1")
-    
-    if request.max_turns > 20:
-        raise HTTPException(status_code=400, detail="max_turns cannot exceed 20")
+
+    if request.max_turns > 50:
+        raise HTTPException(status_code=400, detail="max_turns cannot exceed 50")
+
+    if not (0.01 <= request.cost_limit <= 50):
+        raise HTTPException(
+            status_code=400,
+            detail="cost_limit must be between $0.01 and $50"
+        )
 
     async def event_generator():
         """Stream debate events to the client."""
@@ -675,7 +719,8 @@ async def start_debate(request: StartDebateRequest):
                 debate_models=request.models,
                 moderator_model=config.CHAIRMAN_MODEL,
                 max_turns=request.max_turns,
-                roles=request.roles
+                roles=request.roles,
+                cost_limit=request.cost_limit,
             ):
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as e:
@@ -691,6 +736,73 @@ async def start_debate(request: StartDebateRequest):
     )
 
 
+@app.post("/api/sandbox/start")
+async def start_sandbox(request: StartSandboxRequest):
+    """
+    Start a sandbox simulation and stream events as it progresses.
+    Returns a streaming response with simulation events.
+    """
+    if not (MIN_AGENTS <= len(request.agents) <= AGENT_CAP):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Need between {MIN_AGENTS} and {AGENT_CAP} agents"
+        )
+
+    for agent in request.agents:
+        if not agent.name or not agent.name.strip():
+            raise HTTPException(status_code=400, detail="Every agent needs a name")
+        if not agent.model:
+            raise HTTPException(status_code=400, detail="Every agent needs a model")
+
+    if not (1 <= request.max_ticks <= MAX_TICKS):
+        raise HTTPException(
+            status_code=400,
+            detail=f"max_ticks must be between 1 and {MAX_TICKS}"
+        )
+
+    async def event_generator():
+        """Stream simulation events to the client."""
+        try:
+            async for event in run_simulation(
+                agents_spec=[a.dict() for a in request.agents],
+                max_ticks=request.max_ticks,
+            ):
+                yield f"data: {json.dumps(event)}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
+
+
+def _find_free_port(candidates):
+    """Return the first port that can be bound on 127.0.0.1."""
+    import socket
+    for port in candidates:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            try:
+                sock.bind(("127.0.0.1", port))
+                return port
+            except OSError:
+                continue
+    return None
+
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    # 8090 is the default; the rest are fallbacks if it is taken or
+    # reserved by Windows (e.g. a WinNAT excluded port range).
+    port = _find_free_port([8090, 8091, 8092, 9001, 9100])
+    if port is None:
+        logger.error("No free port found in the candidate list — cannot start.")
+        sys.exit(1)
+    if port != 8090:
+        logger.warning(f"Port 8090 unavailable; using fallback port {port}.")
+    logger.info(f"Starting server on http://127.0.0.1:{port}")
+    uvicorn.run(app, host="127.0.0.1", port=port)

@@ -25,7 +25,7 @@
 
 .config-btn {
   padding: 10px;
-  background: #f0f0f0;
+  background: var(--surface-2);
   border: 1px solid #ddd;
   border-radius: 6px;
   cursor: pointer;
@@ -44,8 +44,8 @@
 .new-conversation-btn {
   flex: 1;
   padding: 10px;
-  background: #4a90e2;
-  border: 1px solid #4a90e2;
+  background: var(--accent);
+  border: 1px solid var(--accent);
   border-radius: 6px;
   color: #fff;
   cursor: pointer;
@@ -55,8 +55,8 @@
 }
 
 .new-conversation-btn:hover {
-  background: #357abd;
-  border-color: #357abd;
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
 }
 
 .conversation-list {
@@ -85,12 +85,12 @@
 }
 
 .conversation-item:hover {
-  background: #f0f0f0;
+  background: var(--surface-2);
 }
 
 .conversation-item.active {
-  background: #e8f0fe;
-  border: 1px solid #4a90e2;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
 }
 
 .conversation-content {
@@ -136,7 +136,7 @@
   gap: 4px;
   padding: 8px 12px;
   border-bottom: 1px solid #e0e0e0;
-  background: #f0f0f0;
+  background: var(--surface-2);
 }
 
 .mode-btn {
@@ -162,8 +162,8 @@
 }
 
 .mode-btn.active {
-  background: #fff;
-  border-color: #4a90e2;
-  color: #4a90e2;
+  background: var(--surface);
+  border-color: var(--accent);
+  color: var(--accent);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }

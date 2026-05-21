@@ -7,6 +7,7 @@ import Stage2Streaming from './Stage2Streaming';
 import Stage3 from './Stage3';
 import Stage3Streaming from './Stage3Streaming';
 import CouncilModelSelector from './CouncilModelSelector';
+import CostBadge from './CostBadge';
 import { exportConversationToPdf } from '../utils/exportPdf';
 import './ChatInterface.css';
 
@@ -58,6 +59,14 @@ export default function ChatInterface({
 
   return (
     <div className="chat-interface">
+      {isLoading && activeJobId && onCancelJob && (
+        <button
+          className="run-stop-btn"
+          onClick={() => onCancelJob(activeJobId)}
+        >
+          Stop
+        </button>
+      )}
       <div className="messages-container">
         {conversation.messages.length === 0 ? (
           <div className="empty-state">
@@ -78,7 +87,15 @@ export default function ChatInterface({
                 </div>
               ) : (
                 <div className="assistant-message">
-                  <div className="message-label">LLM Council</div>
+                  <div className="message-label-row">
+                    <div className="message-label">LLM Council</div>
+                    {msg.progress?.cost && msg.progress.cost.calls > 0 && (
+                      <CostBadge
+                        total={msg.progress.cost.total_cost || 0}
+                        estimated={msg.progress.cost.estimated_calls > 0}
+                      />
+                    )}
+                  </div>
 
                   {/* Stage 1 - Show streaming view while loading, final view when complete */}
                   {msg.loading?.stage1 && msg.progress?.model_streams && (

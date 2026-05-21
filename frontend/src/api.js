@@ -2,7 +2,7 @@
  * API client for the LLM Council backend.
  */
 
-const API_BASE = 'http://localhost:8001';
+const API_BASE = 'http://localhost:8090';
 
 // Logging helper
 const log = (category, message, data = null) => {
@@ -332,22 +332,31 @@ export const api = {
    * @param {string[]} models - Array of model IDs to participate
    * @param {number} maxTurns - Maximum discussion turns (default 6)
    * @param {string[]} roles - Optional array of role keys for each model
+   * @param {number} costLimit - Max total API spend ($) before the debate stops
    * @param {function} onEvent - Callback for each event: (event) => void
    * @returns {Promise<void>}
    */
-  async startDebateStream(topic, models, maxTurns, roles, onEvent) {
-    const response = await fetch(`${API_BASE}/api/debate/start`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        topic,
-        models,
-        max_turns: maxTurns,
-        roles: roles || null,
-      }),
-    });
+  async startDebateStream(topic, models, maxTurns, roles, costLimit, onEvent, abortController) {
+    let response;
+    try {
+      response = await fetch(`${API_BASE}/api/debate/start`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          topic,
+          models,
+          max_turns: maxTurns,
+          roles: roles || null,
+          cost_limit: costLimit ?? 10,
+        }),
+        signal: abortController?.signal,
+      });
+    } catch (e) {
+      if (e.name === 'AbortError') return;  // user pressed Stop
+      throw e;
+    }
 
     if (!response.ok) {
       const error = await response.json();
@@ -358,29 +367,104 @@ export const api = {
     const decoder = new TextDecoder();
     let buffer = '';
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      
-      // Keep the last incomplete line in the buffer
-      buffer = lines.pop() || '';
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
 
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6);
-          try {
-            const event = JSON.parse(data);
-            onEvent(event);
-          } catch (e) {
-            console.error('Failed to parse debate SSE event:', e, 'Data:', data);
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            try {
+              const event = JSON.parse(data);
+              onEvent(event);
+            } catch (e) {
+              console.error('Failed to parse debate SSE event:', e, 'Data:', data);
+            }
           }
         }
       }
+    } catch (e) {
+      if (e.name === 'AbortError') return;  // Stop pressed mid-stream
+      throw e;
     }
-    
+
+    if (buffer.startsWith('data: ')) {
+      const data = buffer.slice(6);
+      try {
+        const event = JSON.parse(data);
+        onEvent(event);
+      } catch (e) {
+        // Ignore incomplete final chunk
+      }
+    }
+  },
+
+  /**
+   * Start a sandbox simulation and stream events.
+   * @param {object[]} agents - Agent specs: {name, backstory, personality, goal, model}
+   * @param {number} maxTicks - Number of simulation ticks
+   * @param {function} onEvent - Callback for each event: (event) => void
+   * @returns {Promise<void>}
+   */
+  async startSandboxStream(agents, maxTicks, onEvent, abortController) {
+    let response;
+    try {
+      response = await fetch(`${API_BASE}/api/sandbox/start`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          agents,
+          max_ticks: maxTicks,
+        }),
+        signal: abortController?.signal,
+      });
+    } catch (e) {
+      if (e.name === 'AbortError') return;  // user pressed Stop
+      throw e;
+    }
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to start simulation');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            try {
+              const event = JSON.parse(data);
+              onEvent(event);
+            } catch (e) {
+              console.error('Failed to parse sandbox SSE event:', e, 'Data:', data);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      if (e.name === 'AbortError') return;  // Stop pressed mid-stream
+      throw e;
+    }
+
     // Process any remaining data in buffer
     if (buffer.startsWith('data: ')) {
       const data = buffer.slice(6);

@@ -12,7 +12,7 @@
 }
 
 .council-config-modal {
-  background: #ffffff;
+  background: var(--surface);
   border-radius: 12px;
   width: 90%;
   max-width: 700px;
@@ -110,12 +110,12 @@
 }
 
 .model-chip {
-  background: #e8f0fe;
+  background: var(--accent-soft);
   color: #333;
   padding: 6px 12px;
   border-radius: 6px;
   font-size: 14px;
-  border: 1px solid #4a90e2;
+  border: 1px solid var(--accent);
 }
 
 .model-chip.chairman {
@@ -125,7 +125,7 @@
 }
 
 .select-models-button {
-  background: #4a90e2;
+  background: var(--accent);
   color: white;
   border: none;
   padding: 10px 20px;
@@ -137,7 +137,7 @@
 }
 
 .select-models-button:hover {
-  background: #357abd;
+  background: var(--accent-deep);
 }
 
 .config-actions {
@@ -149,7 +149,7 @@
 }
 
 .cancel-button {
-  background: #f0f0f0;
+  background: var(--surface-2);
   color: #333;
   border: 1px solid #ddd;
   padding: 10px 24px;

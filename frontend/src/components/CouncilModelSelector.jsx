@@ -158,10 +158,10 @@ export default function CouncilModelSelector() {
     return (
       <div className="council-model-selector">
         <div className="selector-header">
-          <span className="selector-title">🏛️ Council Configuration</span>
+          <span className="selector-title">Council Configuration</span>
         </div>
         <div className="error-message">
-          <span>⚠️ {error}</span>
+          <span>{error}</span>
           <button className="retry-btn" onClick={() => { setLoading(true); setError(null); loadConfig(); loadModels(); }}>
             Retry
           </button>
@@ -173,7 +173,7 @@ export default function CouncilModelSelector() {
   return (
     <div className="council-model-selector">
       <div className="selector-header">
-        <span className="selector-title">🏛️ Council Configuration</span>
+        <span className="selector-title">Council Configuration</span>
         {saving && <span className="saving-indicator">Saving...</span>}
       </div>
 

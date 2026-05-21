@@ -4,7 +4,7 @@
 }
 
 .final-response {
-  background: #ffffff;
+  background: var(--surface);
   padding: 20px;
   border-radius: 6px;
   border: 1px solid #c8e6c8;

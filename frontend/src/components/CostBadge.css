@@ -1,0 +1,38 @@
+.cost-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--teal-soft);
+  border: 1px solid var(--teal);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.cost-badge-label {
+  color: var(--teal-deep);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+}
+
+.cost-badge-value {
+  color: var(--teal-deep);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.cost-badge--estimated {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+.cost-badge--estimated .cost-badge-label {
+  color: #64748b;
+}
+
+.cost-badge--estimated .cost-badge-value {
+  color: #475569;
+}

@@ -1,10 +1,16 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { api } from '../api';
+import CostBadge from './CostBadge';
 import './DebateSetup.css';
+
+// Rough token assumptions for the pre-run cost estimate
+const EST_PROMPT_TOKENS = 1500;
+const EST_COMPLETION_TOKENS = 600;
 
 export default function DebateSetup({ onStartDebate, isDebating }) {
   const [topic, setTopic] = useState('');
   const [maxTurns, setMaxTurns] = useState(6);
+  const [costLimit, setCostLimit] = useState(10);
   const [selectedModels, setSelectedModels] = useState([]);
   const [modelRoles, setModelRoles] = useState({});
   const [useRoles, setUseRoles] = useState(false);
@@ -86,6 +92,25 @@ export default function DebateSetup({ onStartDebate, isDebating }) {
     });
   };
 
+  // Rough pre-run estimate: one call per opening + 2 per discussion turn
+  // (speaker + moderator) + 1 summary.
+  const estimatedCost = useMemo(() => {
+    if (allModels.length === 0 || selectedModels.length === 0) return 0;
+    const perCall = (modelId) => {
+      const pricing = allModels.find((m) => m.id === modelId)?.pricing;
+      if (!pricing) return 0;
+      return (
+        EST_PROMPT_TOKENS * parseFloat(pricing.prompt || 0) +
+        EST_COMPLETION_TOKENS * parseFloat(pricing.completion || 0)
+      );
+    };
+    const avgPerCall =
+      selectedModels.reduce((sum, id) => sum + perCall(id), 0) /
+      selectedModels.length;
+    const callCount = selectedModels.length + 2 * maxTurns + 1;
+    return avgPerCall * callCount;
+  }, [allModels, selectedModels, maxTurns]);
+
   const handleStartDebate = () => {
     if (!topic.trim() || selectedModels.length < 2 || isDebating) return;
     
@@ -102,6 +127,7 @@ export default function DebateSetup({ onStartDebate, isDebating }) {
       models: selectedModels,
       maxTurns,
       roles,
+      costLimit,
     });
   };
 
@@ -139,7 +165,6 @@ export default function DebateSetup({ onStartDebate, isDebating }) {
       <div className="debate-setup-form">
         <div className="form-section">
           <label className="form-label">
-            <span className="label-icon">💬</span>
             Debate Topic
           </label>
           <textarea
@@ -154,28 +179,53 @@ export default function DebateSetup({ onStartDebate, isDebating }) {
 
         <div className="form-section">
           <label className="form-label">
-            <span className="label-icon">🔄</span>
             Discussion Rounds
           </label>
           <div className="turns-selector">
             <input
               type="range"
               min="2"
-              max="12"
+              max="50"
               value={maxTurns}
               onChange={(e) => setMaxTurns(parseInt(e.target.value))}
               disabled={isDebating}
               className="turns-slider"
             />
-            <span className="turns-value">{maxTurns} turns</span>
+            <span className="turns-value">{maxTurns} rounds</span>
           </div>
-          <p className="form-hint">More turns allow deeper discussion but take longer</p>
+          <p className="form-hint">
+            The debate stops at whichever comes first — this round cap or the cost limit below.
+          </p>
+        </div>
+
+        <div className="form-section">
+          <label className="form-label">
+            Cost Limit
+          </label>
+          <div className="cost-limit-selector">
+            <span className="cost-limit-prefix">$</span>
+            <input
+              type="number"
+              className="cost-limit-input"
+              min="0.5"
+              max="50"
+              step="0.5"
+              value={costLimit}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                setCostLimit(isNaN(v) ? 0.5 : Math.min(50, Math.max(0.5, v)));
+              }}
+              disabled={isDebating}
+            />
+          </div>
+          <p className="form-hint">
+            The debate halts once total API spend reaches this amount. Hard ceiling: $50.
+          </p>
         </div>
 
         <div className="form-section">
           <div className="form-label-row">
             <label className="form-label">
-              <span className="label-icon">🎭</span>
               Assign Debate Roles
             </label>
             <label className="toggle-label">
@@ -195,7 +245,6 @@ export default function DebateSetup({ onStartDebate, isDebating }) {
 
         <div className="form-section">
           <label className="form-label">
-            <span className="label-icon">🤖</span>
             Select Debaters ({selectedModels.length} selected)
           </label>
           
@@ -324,6 +373,11 @@ export default function DebateSetup({ onStartDebate, isDebating }) {
           </div>
         </div>
 
+        <div className="debate-estimate">
+          <CostBadge total={estimatedCost} estimated label="Est. cost" />
+          <span className="estimate-hint">rough estimate — actual cost is tracked live</span>
+        </div>
+
         <button
           className="start-debate-btn"
           onClick={handleStartDebate}
@@ -335,10 +389,7 @@ export default function DebateSetup({ onStartDebate, isDebating }) {
               Debate in Progress...
             </>
           ) : (
-            <>
-              <span className="btn-icon">⚔️</span>
-              Start Debate
-            </>
+            <>Start Debate</>
           )}
         </button>
       </div>

@@ -31,13 +31,19 @@ export default function Sidebar({
           className={`mode-btn ${activeMode === 'council' ? 'active' : ''}`}
           onClick={() => onModeChange('council')}
         >
-          🏛️ Council
+          Council
         </button>
         <button
           className={`mode-btn ${activeMode === 'debate' ? 'active' : ''}`}
           onClick={() => onModeChange('debate')}
         >
-          ⚔️ Debate
+          Debate
+        </button>
+        <button
+          className={`mode-btn ${activeMode === 'sandbox' ? 'active' : ''}`}
+          onClick={() => onModeChange('sandbox')}
+        >
+          Sandbox
         </button>
       </div>
 
@@ -66,7 +72,7 @@ export default function Sidebar({
                 onClick={(e) => handleDelete(e, conv.id)}
                 title="Delete conversation"
               >
-                🗑️
+                ×
               </button>
             </div>
           ))

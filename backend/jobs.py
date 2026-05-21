@@ -111,6 +111,13 @@ class JobManager:
                     "model_streams": {},  # model -> {content: str, status: 'streaming'|'complete'|'failed'}
                     "stage2_streams": {},  # model -> {content: str, status: 'streaming'|'complete'|'failed', char_count: int}
                     "stage3_stream": {"content": "", "status": "pending", "char_count": 0, "model": ""},  # chairman streaming
+                    "cost": {  # running cost total across all model calls
+                        "total_cost": 0.0,
+                        "prompt_tokens": 0,
+                        "completion_tokens": 0,
+                        "calls": 0,
+                        "estimated_calls": 0,
+                    },
                 },
             }
             
@@ -299,6 +306,35 @@ class JobManager:
             if status:
                 self._save_jobs()
     
+    async def add_cost(
+        self,
+        job_id: str,
+        cost: float,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
+        estimated: bool = False,
+    ):
+        """Accumulate the cost of one completed model call into the job."""
+        async with self._lock:
+            if job_id not in self._jobs:
+                return
+
+            job = self._jobs[job_id]
+            # Older jobs loaded from disk may predate the cost field.
+            c = job["progress"].setdefault("cost", {
+                "total_cost": 0.0, "prompt_tokens": 0,
+                "completion_tokens": 0, "calls": 0, "estimated_calls": 0,
+            })
+            c["total_cost"] += cost
+            c["prompt_tokens"] += prompt_tokens
+            c["completion_tokens"] += completion_tokens
+            c["calls"] += 1
+            if estimated:
+                c["estimated_calls"] += 1
+
+            job["updated_at"] = datetime.utcnow().isoformat()
+            self._save_jobs()
+
     async def complete_job(self, job_id: str):
         """Mark a job as complete and clean up."""
         async with self._lock:
