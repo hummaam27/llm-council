@@ -39,12 +39,6 @@ export default function Sidebar({
         >
           Debate
         </button>
-        <button
-          className={`mode-btn ${activeMode === 'sandbox' ? 'active' : ''}`}
-          onClick={() => onModeChange('sandbox')}
-        >
-          Sandbox
-        </button>
       </div>
 
       <div className="conversation-list">

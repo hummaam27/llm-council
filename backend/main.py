@@ -29,7 +29,6 @@ from . import config
 from . import cost
 from .jobs import job_manager, JobStatus
 from .debate import run_debate, DEBATE_ROLES
-from .sandbox import run_simulation, AGENT_CAP, MIN_AGENTS, MAX_TICKS
 
 app = FastAPI(title="LLM Council API")
 
@@ -77,21 +76,6 @@ class StartDebateRequest(BaseModel):
     max_turns: int = 6
     roles: Optional[List[str]] = None
     cost_limit: float = 10.0
-
-
-class SandboxAgentSpec(BaseModel):
-    """A single user-defined agent for a sandbox simulation."""
-    name: str
-    backstory: str = ""
-    personality: str = ""
-    goal: str = ""
-    model: str
-
-
-class StartSandboxRequest(BaseModel):
-    """Request to start a sandbox simulation."""
-    agents: List[SandboxAgentSpec]
-    max_ticks: int = 15
 
 
 class ConversationMetadata(BaseModel):
@@ -721,51 +705,6 @@ async def start_debate(request: StartDebateRequest):
                 max_turns=request.max_turns,
                 roles=request.roles,
                 cost_limit=request.cost_limit,
-            ):
-                yield f"data: {json.dumps(event)}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-        }
-    )
-
-
-@app.post("/api/sandbox/start")
-async def start_sandbox(request: StartSandboxRequest):
-    """
-    Start a sandbox simulation and stream events as it progresses.
-    Returns a streaming response with simulation events.
-    """
-    if not (MIN_AGENTS <= len(request.agents) <= AGENT_CAP):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Need between {MIN_AGENTS} and {AGENT_CAP} agents"
-        )
-
-    for agent in request.agents:
-        if not agent.name or not agent.name.strip():
-            raise HTTPException(status_code=400, detail="Every agent needs a name")
-        if not agent.model:
-            raise HTTPException(status_code=400, detail="Every agent needs a model")
-
-    if not (1 <= request.max_ticks <= MAX_TICKS):
-        raise HTTPException(
-            status_code=400,
-            detail=f"max_ticks must be between 1 and {MAX_TICKS}"
-        )
-
-    async def event_generator():
-        """Stream simulation events to the client."""
-        try:
-            async for event in run_simulation(
-                agents_spec=[a.dict() for a in request.agents],
-                max_ticks=request.max_ticks,
             ):
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as e:

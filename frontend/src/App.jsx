@@ -3,8 +3,6 @@ import Sidebar from './components/Sidebar';
 import ChatInterface from './components/ChatInterface';
 import DebateSetup from './components/DebateSetup';
 import DebateView from './components/DebateView';
-import SandboxSetup from './components/SandboxSetup';
-import SandboxView from './components/SandboxView';
 import { api } from './api';
 import './App.css';
 
@@ -16,13 +14,10 @@ function App() {
   const [activeJobId, setActiveJobId] = useState(null);
   const pollingRef = useRef(null);
   const debateAbortRef = useRef(null);
-  const sandboxAbortRef = useRef(null);
-  
+
   const [activeMode, setActiveMode] = useState('council');
   const [isDebating, setIsDebating] = useState(false);
   const [debateState, setDebateState] = useState(null);
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [sandboxState, setSandboxState] = useState(null);
 
   // Load conversations on mount
   useEffect(() => {
@@ -175,117 +170,6 @@ function App() {
       setDebateState(null);
       setIsDebating(false);
     }
-    if (mode === 'sandbox') {
-      setSandboxState(null);
-      setIsSimulating(false);
-    }
-  };
-
-  const handleStartSandbox = async ({ agents, maxTicks }) => {
-    setIsSimulating(true);
-    setSandboxState({
-      gridSize: 25,
-      maxTicks,
-      places: [],
-      agents: [],
-      tick: 0,
-      events: [],
-      dialogues: [],
-      totalCost: 0,
-      treasury: 0,
-      standings: null,
-    });
-
-    const abortController = new AbortController();
-    sandboxAbortRef.current = abortController;
-
-    try {
-      await api.startSandboxStream(agents, maxTicks, (event) => {
-        if (typeof event.total_cost === 'number') {
-          setSandboxState((prev) => ({ ...prev, totalCost: event.total_cost }));
-        }
-        switch (event.type) {
-          case 'sim_start':
-            setSandboxState((prev) => ({
-              ...prev,
-              gridSize: event.grid_size,
-              maxTicks: event.max_ticks,
-              places: event.places,
-              agents: event.agents,
-              treasury: event.starting_treasury,
-            }));
-            break;
-
-          case 'tick_start':
-            setSandboxState((prev) => ({ ...prev, tick: event.tick }));
-            break;
-
-          case 'agent_action':
-            setSandboxState((prev) => ({
-              ...prev,
-              tick: event.tick,
-              treasury: event.treasury,
-              agents: prev.agents.map((a) =>
-                a.id === event.agent_id
-                  ? {
-                      ...a, x: event.x, y: event.y,
-                      activity: event.activity, coins: event.coins,
-                    }
-                  : a
-              ),
-              events: [...prev.events, event],
-              dialogues:
-                event.action === 'talk' && event.dialogue
-                  ? [
-                      ...prev.dialogues.filter(
-                        (d) => d.agent_id !== event.agent_id
-                      ),
-                      {
-                        agent_id: event.agent_id,
-                        name: event.name,
-                        text: event.dialogue,
-                        tick: event.tick,
-                      },
-                    ]
-                  : prev.dialogues,
-            }));
-            break;
-
-          case 'tick_complete':
-            break;
-
-          case 'sim_complete':
-            setSandboxState((prev) => ({
-              ...prev,
-              standings: event.standings,
-              treasury: event.treasury,
-            }));
-            setIsSimulating(false);
-            break;
-
-          case 'error':
-            console.error('Sandbox error:', event.message);
-            setIsSimulating(false);
-            alert('Simulation error: ' + event.message);
-            break;
-
-          default:
-            console.log('Unknown sandbox event:', event);
-        }
-      }, abortController);
-    } catch (error) {
-      console.error('Failed to start simulation:', error);
-      alert('Failed to start simulation: ' + error.message);
-    } finally {
-      setIsSimulating(false);
-      sandboxAbortRef.current = null;
-    }
-  };
-
-  const handleStopSandbox = () => {
-    sandboxAbortRef.current?.abort();
-    sandboxAbortRef.current = null;
-    setIsSimulating(false);
   };
 
   const handleStartDebate = async ({ topic, models, maxTurns, roles, costLimit }) => {
@@ -648,7 +532,7 @@ function App() {
           activeJobId={activeJobId}
           onCancelJob={handleCancelJob}
         />
-      ) : activeMode === 'debate' ? (
+      ) : (
         <div className="debate-container">
           {!debateState || (!isDebating && debateState.turns.length === 0) ? (
             <DebateSetup
@@ -671,32 +555,6 @@ function App() {
               }}
             >
               Start New Debate
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="debate-container">
-          {!sandboxState || (!isSimulating && sandboxState.events.length === 0) ? (
-            <SandboxSetup
-              onStartSandbox={handleStartSandbox}
-              isSimulating={isSimulating}
-            />
-          ) : (
-            <SandboxView
-              sandboxState={sandboxState}
-              isSimulating={isSimulating}
-              onStop={handleStopSandbox}
-            />
-          )}
-          {sandboxState && sandboxState.events.length > 0 && !isSimulating && (
-            <button
-              className="new-debate-btn"
-              onClick={() => {
-                setSandboxState(null);
-                setIsSimulating(false);
-              }}
-            >
-              Start New Simulation
             </button>
           )}
         </div>
