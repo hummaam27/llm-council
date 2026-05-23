@@ -41,5 +41,6 @@ logs/
 # OS files
 Thumbs.db
 
-# Claude Code per-project state
+# Per-project agent state and instructions
 .claude/
+CLAUDE.md
