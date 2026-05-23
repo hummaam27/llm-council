@@ -336,6 +336,24 @@ export const api = {
     return response.json();
   },
 
+  async pauseDebate(debateId) {
+    const response = await fetch(`${API_BASE}/api/debate/${debateId}/pause`, { method: 'POST' });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || 'Failed to pause debate');
+    }
+    return response.json();
+  },
+
+  async resumeDebate(debateId) {
+    const response = await fetch(`${API_BASE}/api/debate/${debateId}/resume`, { method: 'POST' });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || 'Failed to resume debate');
+    }
+    return response.json();
+  },
+
   async getDebateRoles() {
     const response = await fetch(`${API_BASE}/api/debate/roles`);
     if (!response.ok) {

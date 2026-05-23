@@ -366,9 +366,33 @@ function App() {
     if (!debateId || !content?.trim()) return;
     try {
       await api.interjectDebate(debateId, content);
+      setDebateState((prev) => prev ? { ...prev, isPaused: false } : prev);
     } catch (e) {
       console.error('Interjection failed:', e);
       alert('Could not send interjection: ' + e.message);
+    }
+  };
+
+  const handlePauseDebate = async () => {
+    const debateId = debateState?.debateId;
+    if (!debateId) return;
+    try {
+      await api.pauseDebate(debateId);
+      setDebateState((prev) => prev ? { ...prev, isPaused: true } : prev);
+    } catch (e) {
+      console.error('Pause failed:', e);
+      alert('Could not pause debate: ' + e.message);
+    }
+  };
+
+  const handleResumeDebate = async () => {
+    const debateId = debateState?.debateId;
+    if (!debateId) return;
+    try {
+      await api.resumeDebate(debateId);
+      setDebateState((prev) => prev ? { ...prev, isPaused: false } : prev);
+    } catch (e) {
+      console.error('Resume failed:', e);
     }
   };
 
@@ -627,21 +651,16 @@ function App() {
           ) : (
             <DebateView
               onInterject={handleInterject}
+              onPause={handlePauseDebate}
+              onResume={handleResumeDebate}
               debateState={debateState}
               isDebating={isDebating}
               onStop={handleStopDebate}
-            />
-          )}
-          {debateState && debateState.turns.length > 0 && !isDebating && (
-            <button
-              className="new-debate-btn"
-              onClick={() => {
+              onNewDebate={() => {
                 setDebateState(null);
                 setIsDebating(false);
               }}
-            >
-              Start New Debate
-            </button>
+            />
           )}
         </div>
       )}

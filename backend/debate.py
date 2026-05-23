@@ -53,16 +53,18 @@ async def _stream_panelist_turn(
         if not task.done():
             await task
 
-# Registry of active debates, keyed by debate_id. Each value is an asyncio.Queue
-# the API endpoint pushes user interjections onto; run_debate drains it between turns.
-active_debates: Dict[str, asyncio.Queue] = {}
+# Registry of active debates, keyed by debate_id. Each value contains:
+#   - queue: asyncio.Queue of user interjection strings
+#   - unpaused: asyncio.Event — when SET, debate runs; when CLEARED, debate pauses
+#     between turns so the user can compose an interjection without missing context.
+active_debates: Dict[str, Dict[str, Any]] = {}
 
 
 def _drain_interjections(debate_id: Optional[str], debate_history: List[Dict[str, str]]) -> List[Dict[str, str]]:
     """Drain queued user messages into debate_history. Returns the new entries."""
     if not debate_id or debate_id not in active_debates:
         return []
-    queue = active_debates[debate_id]
+    queue = active_debates[debate_id]["queue"]
     new_entries = []
     while not queue.empty():
         try:
@@ -78,6 +80,16 @@ def _drain_interjections(debate_id: Optional[str], debate_history: List[Dict[str
         debate_history.append(entry)
         new_entries.append(entry)
     return new_entries
+
+
+async def _wait_if_paused(debate_id: Optional[str]):
+    """Block here while the debate is paused (user has 'raised hand')."""
+    if not debate_id or debate_id not in active_debates:
+        return
+    event = active_debates[debate_id]["unpaused"]
+    if not event.is_set():
+        # Genuine pause — wait for resume
+        await event.wait()
 
 # Predefined adversarial roles to prevent echo chambers
 DEBATE_ROLES = {
@@ -152,9 +164,15 @@ async def run_debate(
     await warm_pricing_cache()
     total_cost = 0.0
 
-    # Register an interjection queue so the API can push user messages in mid-debate.
+    # Register interjection queue + pause event so the API can push user messages
+    # and pause the debate while the user composes a hand-raised interjection.
     if debate_id:
-        active_debates[debate_id] = asyncio.Queue()
+        unpaused = asyncio.Event()
+        unpaused.set()  # start unpaused — debate runs immediately
+        active_debates[debate_id] = {
+            "queue": asyncio.Queue(),
+            "unpaused": unpaused,
+        }
 
     # Build context from attachments if any
     context = ""
@@ -287,6 +305,9 @@ HARD RULES — this is a fast-moving debate, not a monologue:
     turn = 0
     moderator_ended = False
     while turn < max_turns and total_cost < cost_limit:
+        # If the user "raised their hand", pause here until they send or cancel.
+        await _wait_if_paused(debate_id)
+
         # Drain any user interjections queued since the last turn so the moderator
         # and the next speaker see them in the transcript.
         for entry in _drain_interjections(debate_id, debate_history):

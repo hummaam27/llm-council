@@ -739,17 +739,41 @@ class InterjectRequest(BaseModel):
 
 @app.post("/api/debate/{debate_id}/interject")
 async def interject_debate(debate_id: str, request: InterjectRequest):
-    """Push a user message into a live debate. The next turn's panelist will see it."""
+    """Push a user message into a live debate. The next turn's panelist will see it.
+    Also auto-resumes the debate if it was paused via 'raise hand'."""
     content = (request.content or "").strip()
     if not content:
         raise HTTPException(status_code=400, detail="Interjection content cannot be empty")
 
-    queue = active_debates.get(debate_id)
-    if queue is None:
+    state = active_debates.get(debate_id)
+    if state is None:
         raise HTTPException(status_code=404, detail="Debate not found or already ended")
 
-    await queue.put(content)
+    await state["queue"].put(content)
+    # Sending implicitly resumes the debate if it was paused
+    state["unpaused"].set()
     return {"success": True, "queued": True}
+
+
+@app.post("/api/debate/{debate_id}/pause")
+async def pause_debate(debate_id: str):
+    """Pause the debate between turns so the user can compose an interjection.
+    The current speaker (if any) finishes their turn, then the debate waits."""
+    state = active_debates.get(debate_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail="Debate not found or already ended")
+    state["unpaused"].clear()
+    return {"success": True, "paused": True}
+
+
+@app.post("/api/debate/{debate_id}/resume")
+async def resume_debate(debate_id: str):
+    """Resume a paused debate without sending an interjection."""
+    state = active_debates.get(debate_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail="Debate not found or already ended")
+    state["unpaused"].set()
+    return {"success": True, "paused": False}
 
 
 def _find_free_port(candidates):

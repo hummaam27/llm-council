@@ -14,14 +14,14 @@ Both modes can use OpenRouter's web search plugin so the models cite live source
 
 ## Screenshots
 
-**Council in action** — three models' responses streaming in parallel, with the Stage 1 / Stage 2 / Stage 3 view of the deliberation.
-![Council deliberation](images/council-deliberation.png)
+**Live debate with you in the room.** Each panelist has a stable color (moss, slate blue, plum, ochre, deep teal, umber) — same identity across the participant chips, avatars and bubbles. Your voice stays distinct in the brand orange on the right. The sticky bar at the bottom lets you raise your hand to pause the debate or just jump in.
+![Live debate with user interjection](images/debate-live.png)
 
-**Council setup** — Council Configuration card with panel members, chairman, and the per-question web search toggle.
-![Council setup](images/council-setup.png)
+**Debate setup.** Pick your panelists, assign adversarial roles (Advocate, Skeptic, Devil's Advocate, Synthesizer, Fact-Checker, Pragmatist) to prevent echo chambers, choose a separate moderator to write the final summary, and toggle live web search.
+![Debate setup with role assignment](images/debate-setup.png)
 
-**Debate setup** — topic, rounds, cost limit, panelists, role assignment, moderator picker, and web search toggle.
-![Debate setup](images/debate-setup.png)
+**Moderator's summary.** When the discussion concludes, the moderator (independent of the panel) synthesizes the debate into a single structured write-up — key positions per panelist, areas of agreement and disagreement, standout contributions. The model that wrote it is named in the header so you always know who's speaking.
+![Moderator summary](images/debate-summary.png)
 
 ---
 
