@@ -12,6 +12,7 @@ async def stage1_collect_responses_streaming(
     on_model_complete: Optional[Callable[[str, bool], None]] = None,
     should_skip_model: Optional[Callable[[str], bool]] = None,  # Check if model should be skipped
     should_force_continue: Optional[Callable[[], bool]] = None,  # Check if we should stop early
+    enable_web: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     Stage 1: Collect individual responses from all council models with streaming.
@@ -40,8 +41,8 @@ async def stage1_collect_responses_streaming(
                     raise asyncio.CancelledError("Model skipped by user")
                 if on_chunk:
                     await on_chunk(model, chunk)
-            
-            result = await stream_model(model, messages, chunk_handler)
+
+            result = await stream_model(model, messages, chunk_handler, enable_web=enable_web)
             if on_model_complete:
                 await on_model_complete(model, result is not None)
             return (model, result)
@@ -53,7 +54,7 @@ async def stage1_collect_responses_streaming(
             if on_model_complete:
                 await on_model_complete(model, False)
             return (model, None)
-    
+
     # Create tasks with model tracking
     model_tasks = {model: asyncio.create_task(stream_with_callback(model)) for model in models}
     pending = set(model_tasks.values())
@@ -98,6 +99,7 @@ async def stage1_collect_responses_streaming(
                 "model": model,
                 "response": results_dict[model].get('content', ''),
                 "usage": results_dict[model].get('usage'),
+                "annotations": results_dict[model].get('annotations'),
             })
 
     return stage1_results
@@ -105,7 +107,8 @@ async def stage1_collect_responses_streaming(
 
 async def stage1_collect_responses(
     user_query: str,
-    on_model_complete: Optional[Callable[[str, bool], None]] = None
+    on_model_complete: Optional[Callable[[str, bool], None]] = None,
+    enable_web: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     Stage 1: Collect individual responses (non-streaming fallback).
@@ -116,7 +119,7 @@ async def stage1_collect_responses(
     async def query_with_callback(model: str) -> tuple:
         try:
             result = await asyncio.wait_for(
-                query_model(model, messages, timeout=180.0),
+                query_model(model, messages, enable_web=enable_web),
                 timeout=190.0
             )
             if on_model_complete:
@@ -144,6 +147,7 @@ async def stage1_collect_responses(
                 "model": model,
                 "response": response.get('content', ''),
                 "usage": response.get('usage'),
+                "annotations": response.get('annotations'),
             })
 
     return stage1_results
@@ -582,18 +586,19 @@ Title:"""
     return {"title": title, "usage": response.get('usage')}
 
 
-async def run_full_council(user_query: str) -> Tuple[List, List, Dict, Dict]:
+async def run_full_council(user_query: str, enable_web: bool = False) -> Tuple[List, List, Dict, Dict]:
     """
     Run the complete 3-stage council process.
 
     Args:
         user_query: The user's question
+        enable_web: If True, give Stage 1 models web search access.
 
     Returns:
         Tuple of (stage1_results, stage2_results, stage3_result, metadata)
     """
     # Stage 1: Collect individual responses
-    stage1_results = await stage1_collect_responses(user_query)
+    stage1_results = await stage1_collect_responses(user_query, enable_web=enable_web)
 
     # If no models responded successfully, return error
     if not stage1_results:

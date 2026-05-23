@@ -20,6 +20,7 @@ export default function ChatInterface({
 }) {
   const [input, setInput] = useState('');
   const [isExporting, setIsExporting] = useState(false);
+  const [enableWeb, setEnableWeb] = useState(false);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -33,7 +34,7 @@ export default function ChatInterface({
   const handleSubmit = (e) => {
     e.preventDefault();
     if (input.trim() && !isLoading) {
-      onSendMessage(input);
+      onSendMessage(input, { enableWeb });
       setInput('');
     }
   };
@@ -198,7 +199,10 @@ export default function ChatInterface({
 
       {conversation.messages.length === 0 && (
         <>
-          <CouncilModelSelector />
+          <CouncilModelSelector
+            enableWeb={enableWeb}
+            onEnableWebChange={setEnableWeb}
+          />
           <form className="input-form" onSubmit={handleSubmit}>
             <textarea
               className="message-input"

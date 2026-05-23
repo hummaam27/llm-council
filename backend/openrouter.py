@@ -11,6 +11,8 @@ logger = logging.getLogger('council.openrouter')
 async def query_model(
     model: str,
     messages: List[Dict[str, str]],
+    enable_web: bool = False,
+    web_max_results: int = 3,
 ) -> Optional[Dict[str, Any]]:
     """
     Query a single model via OpenRouter API.
@@ -19,9 +21,13 @@ async def query_model(
     Args:
         model: OpenRouter model identifier (e.g., "openai/gpt-4o")
         messages: List of message dicts with 'role' and 'content'
+        enable_web: If True, attach OpenRouter's web search plugin so the model
+            can search the web before answering. Adds ~$0.004 per result returned.
+        web_max_results: Max search results to fetch when enable_web is True.
 
     Returns:
-        Response dict with 'content' and optional 'reasoning_details', or None if failed
+        Response dict with 'content', optional 'reasoning_details', and
+        optional 'annotations' (citations from web search), or None if failed.
     """
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -32,6 +38,9 @@ async def query_model(
         "model": model,
         "messages": messages,
     }
+
+    if enable_web:
+        payload["plugins"] = [{"id": "web", "max_results": web_max_results}]
 
     try:
         logger.info(f"  → Calling {model}...")
@@ -67,6 +76,7 @@ async def query_model(
             return {
                 'content': content,
                 'reasoning_details': message.get('reasoning_details'),
+                'annotations': message.get('annotations'),
                 'usage': data.get('usage'),
             }
 
@@ -133,21 +143,26 @@ async def stream_model(
     model: str,
     messages: List[Dict[str, str]],
     on_chunk: callable,
+    enable_web: bool = False,
+    web_max_results: int = 3,
 ) -> Optional[Dict[str, Any]]:
     """
     Stream a response from a model, calling on_chunk for each text chunk.
     No timeout - let the model respond as long as it needs.
-    
+
     Args:
         model: OpenRouter model identifier
         messages: List of message dicts
         on_chunk: Async callback(text_chunk) called for each chunk of text
-    
+        enable_web: If True, attach OpenRouter's web search plugin.
+        web_max_results: Max search results when enable_web is True.
+
     Returns:
-        Final response dict with full 'content', or None if failed
+        Final response dict with full 'content', 'annotations', 'usage',
+        or None if failed.
     """
     import json
-    
+
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
@@ -159,8 +174,12 @@ async def stream_model(
         "stream": True,
     }
 
+    if enable_web:
+        payload["plugins"] = [{"id": "web", "max_results": web_max_results}]
+
     full_content = ""
     usage = None
+    annotations = None
 
     try:
         logger.info(f"  → Streaming {model}...")
@@ -195,12 +214,20 @@ async def stream_model(
                         
                         try:
                             data = json.loads(data_str)
-                            delta = data.get('choices', [{}])[0].get('delta', {})
+                            choice = data.get('choices', [{}])[0]
+                            delta = choice.get('delta', {})
                             content = delta.get('content', '')
 
                             if content:
                                 full_content += content
                                 await on_chunk(content)
+
+                            # Annotations (web search citations) may arrive on
+                            # either the delta or the final message.
+                            if delta.get('annotations'):
+                                annotations = delta['annotations']
+                            if choice.get('message', {}).get('annotations'):
+                                annotations = choice['message']['annotations']
 
                             # Usage arrives in the final chunk before [DONE]
                             # (a chunk with empty choices) — keep looping.
@@ -212,7 +239,7 @@ async def stream_model(
                             pass
 
         logger.info(f"  ← {model} streamed ({len(full_content)} chars)")
-        return {'content': full_content, 'usage': usage}
+        return {'content': full_content, 'usage': usage, 'annotations': annotations}
         
     except httpx.TimeoutException:
         logger.error(f"  ✗ {model} CONNECTION TIMEOUT (server unreachable)")

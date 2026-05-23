@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { api } from '../api';
 import './CouncilModelSelector.css';
 
-export default function CouncilModelSelector() {
+export default function CouncilModelSelector({ enableWeb, onEnableWebChange }) {
   const [councilModels, setCouncilModels] = useState([]);
   const [chairmanModel, setChairmanModel] = useState('');
   const [allModels, setAllModels] = useState([]);
@@ -218,7 +218,7 @@ export default function CouncilModelSelector() {
             ) : (
               <span className="no-selection">No chairman selected</span>
             )}
-            <button 
+            <button
               className="add-btn"
               onClick={() => openDropdown('chairman')}
             >
@@ -226,6 +226,23 @@ export default function CouncilModelSelector() {
             </button>
           </div>
         </div>
+
+        {/* Tools — applies to the next question only */}
+        {onEnableWebChange && (
+          <div className="model-section">
+            <div className="section-label">Tools</div>
+            <div className="selected-models">
+              <label className="web-toggle" title="Allow Stage 1 models to search the web for the next question. Adds ~$0.02 per searching model.">
+                <input
+                  type="checkbox"
+                  checked={!!enableWeb}
+                  onChange={(e) => onEnableWebChange(e.target.checked)}
+                />
+                <span>🌐 Web search</span>
+              </label>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Dropdown Modal */}

@@ -28,7 +28,7 @@ from .openrouter import fetch_available_models
 from . import config
 from . import cost
 from .jobs import job_manager, JobStatus
-from .debate import run_debate, DEBATE_ROLES
+from .debate import run_debate, DEBATE_ROLES, active_debates
 
 app = FastAPI(title="LLM Council API")
 
@@ -61,6 +61,7 @@ class CreateConversationRequest(BaseModel):
 class SendMessageRequest(BaseModel):
     """Request to send a message in a conversation."""
     content: str
+    enable_web: bool = False
 
 
 class UpdateCouncilConfigRequest(BaseModel):
@@ -76,6 +77,8 @@ class StartDebateRequest(BaseModel):
     max_turns: int = 6
     roles: Optional[List[str]] = None
     cost_limit: float = 10.0
+    enable_web: bool = False
+    moderator_model: Optional[str] = None
 
 
 class ConversationMetadata(BaseModel):
@@ -198,7 +201,8 @@ async def send_message(conversation_id: str, request: SendMessageRequest):
 
     # Run the 3-stage council process
     stage1_results, stage2_results, stage3_result, metadata = await run_full_council(
-        request.content
+        request.content,
+        enable_web=request.enable_web,
     )
 
     # Add assistant message with all stages
@@ -221,7 +225,7 @@ async def send_message(conversation_id: str, request: SendMessageRequest):
 
 JOB_TIMEOUT_SECONDS = 600  # 10 minute max for entire job
 
-async def run_council_job(job_id: str, conversation_id: str, user_query: str, is_first_message: bool):
+async def run_council_job(job_id: str, conversation_id: str, user_query: str, is_first_message: bool, enable_web: bool = False):
     """
     Run the council process as a background job.
     This runs independently of client connections.
@@ -282,11 +286,12 @@ async def run_council_job(job_id: str, conversation_id: str, user_query: str, is
             return job_manager.should_force_continue(job_id)
         
         stage1_results = await stage1_collect_responses_streaming(
-            user_query, 
-            on_chunk, 
+            user_query,
+            on_chunk,
             on_model_complete,
             should_skip_model,
-            should_force_continue
+            should_force_continue,
+            enable_web=enable_web,
         )
         logger.info(f"[Job {job_id[:8]}] ✓ STAGE 1 COMPLETE: Got {len(stage1_results)} responses")
         for r in stage1_results:
@@ -459,7 +464,7 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
     # Start the council process as a background task
     logger.info(f"Starting council background task...")
     task = asyncio.create_task(
-        run_council_job(job_id, conversation_id, request.content, is_first_message)
+        run_council_job(job_id, conversation_id, request.content, is_first_message, enable_web=request.enable_web)
     )
     await job_manager.set_job_task(job_id, task)
     logger.info(f"Background task started successfully")
@@ -695,20 +700,27 @@ async def start_debate(request: StartDebateRequest):
             detail="cost_limit must be between $0.01 and $50"
         )
 
+    debate_id = str(uuid.uuid4())
+
     async def event_generator():
         """Stream debate events to the client."""
         try:
             async for event in run_debate(
                 topic=request.topic,
                 debate_models=request.models,
-                moderator_model=config.CHAIRMAN_MODEL,
+                moderator_model=request.moderator_model or config.get_chairman_model(),
                 max_turns=request.max_turns,
                 roles=request.roles,
                 cost_limit=request.cost_limit,
+                debate_id=debate_id,
+                enable_web=request.enable_web,
             ):
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        finally:
+            # Ensure the queue is removed even if the client disconnected mid-stream.
+            active_debates.pop(debate_id, None)
 
     return StreamingResponse(
         event_generator(),
@@ -718,6 +730,26 @@ async def start_debate(request: StartDebateRequest):
             "Connection": "keep-alive",
         }
     )
+
+
+class InterjectRequest(BaseModel):
+    """Body for a user interjection into a live debate."""
+    content: str
+
+
+@app.post("/api/debate/{debate_id}/interject")
+async def interject_debate(debate_id: str, request: InterjectRequest):
+    """Push a user message into a live debate. The next turn's panelist will see it."""
+    content = (request.content or "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="Interjection content cannot be empty")
+
+    queue = active_debates.get(debate_id)
+    if queue is None:
+        raise HTTPException(status_code=404, detail="Debate not found or already ended")
+
+    await queue.put(content)
+    return {"success": True, "queued": True}
 
 
 def _find_free_port(candidates):

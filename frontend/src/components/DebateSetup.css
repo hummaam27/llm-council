@@ -574,3 +574,33 @@
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
+
+/* Web search toggle for debate */
+.debate-tools {
+  padding: 12px 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.debate-tools .web-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #334155;
+  cursor: pointer;
+  user-select: none;
+}
+
+.debate-tools .web-toggle input[type="checkbox"] {
+  cursor: pointer;
+  accent-color: #d2694a;
+  width: 16px;
+  height: 16px;
+}
+
+.debate-tools .web-toggle input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+}

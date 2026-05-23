@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import SourceList from './SourceList';
 import './Stage1.css';
 
 export default function Stage1({ responses }) {
@@ -30,6 +31,7 @@ export default function Stage1({ responses }) {
         <div className="response-text markdown-content">
           <ReactMarkdown>{responses[activeTab].response}</ReactMarkdown>
         </div>
+        <SourceList annotations={responses[activeTab].annotations} />
       </div>
     </div>
   );

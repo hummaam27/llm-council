@@ -263,3 +263,41 @@
   color: #666;
   font-weight: 500;
 }
+
+/* Web search toggle */
+.input-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.web-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #475569;
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #f1f5f9;
+}
+
+.web-toggle:hover {
+  background: #e2e8f0;
+}
+
+.web-toggle input[type="checkbox"] {
+  cursor: pointer;
+  accent-color: #4a90e2;
+}
+
+.web-toggle input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+}
+
+.input-actions .send-button {
+  margin-left: auto;
+}

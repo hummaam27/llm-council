@@ -172,7 +172,7 @@ function App() {
     }
   };
 
-  const handleStartDebate = async ({ topic, models, maxTurns, roles, costLimit }) => {
+  const handleStartDebate = async ({ topic, models, maxTurns, roles, costLimit, enableWeb = false, moderatorModel = null }) => {
     setIsDebating(true);
     setDebateState({
       topic,
@@ -197,8 +197,24 @@ function App() {
           case 'debate_start':
             setDebateState((prev) => ({
               ...prev,
+              debateId: event.debate_id,
               topic: event.topic,
               participants: event.participants,
+            }));
+            break;
+
+          case 'user_interjection':
+            setDebateState((prev) => ({
+              ...prev,
+              turns: [
+                ...prev.turns,
+                {
+                  model: 'user',
+                  name: 'You',
+                  content: event.content,
+                  turn_type: 'user_interjection',
+                },
+              ],
             }));
             break;
 
@@ -210,26 +226,70 @@ function App() {
             break;
 
           case 'speaker_start':
+            // Push a placeholder turn that the chunk events will fill in.
             setDebateState((prev) => ({
               ...prev,
               currentSpeaker: event.model,
-            }));
-            break;
-
-          case 'speaker_complete':
-            setDebateState((prev) => ({
-              ...prev,
-              currentSpeaker: null,
               turns: [
                 ...prev.turns,
                 {
                   model: event.model,
                   name: event.name,
-                  content: event.content,
-                  turn_type: event.turn_type,
+                  content: '',
+                  turn_type: 'discussion',
+                  isStreaming: true,
+                  annotations: null,
                 },
               ],
             }));
+            break;
+
+          case 'speaker_chunk':
+            setDebateState((prev) => {
+              const turns = [...prev.turns];
+              for (let i = turns.length - 1; i >= 0; i--) {
+                if (turns[i].isStreaming && turns[i].model === event.model) {
+                  turns[i] = { ...turns[i], content: turns[i].content + event.content };
+                  break;
+                }
+              }
+              return { ...prev, turns };
+            });
+            break;
+
+          case 'speaker_complete':
+            setDebateState((prev) => {
+              const turns = [...prev.turns];
+              // Finalize the most recent streaming turn for this model.
+              for (let i = turns.length - 1; i >= 0; i--) {
+                if (turns[i].isStreaming && turns[i].model === event.model) {
+                  turns[i] = {
+                    ...turns[i],
+                    // Prefer canonical content from the server (handles any chunks lost mid-stream)
+                    content: event.content || turns[i].content,
+                    turn_type: event.turn_type,
+                    annotations: event.annotations,
+                    isStreaming: false,
+                  };
+                  return { ...prev, currentSpeaker: null, turns };
+                }
+              }
+              // Fallback: no matching placeholder (shouldn't happen) — append as before.
+              return {
+                ...prev,
+                currentSpeaker: null,
+                turns: [
+                  ...prev.turns,
+                  {
+                    model: event.model,
+                    name: event.name,
+                    content: event.content,
+                    turn_type: event.turn_type,
+                    annotations: event.annotations,
+                  },
+                ],
+              };
+            });
             break;
 
           case 'moderator_decision':
@@ -243,6 +303,17 @@ function App() {
             setDebateState((prev) => ({
               ...prev,
               currentSpeaker: 'moderator',
+              moderatorModel: event.moderator,
+              moderatorName: event.moderator_name,
+              summary: '',
+              summaryStreaming: true,
+            }));
+            break;
+
+          case 'summary_chunk':
+            setDebateState((prev) => ({
+              ...prev,
+              summary: (prev.summary || '') + event.content,
             }));
             break;
 
@@ -250,7 +321,10 @@ function App() {
             setDebateState((prev) => ({
               ...prev,
               currentSpeaker: null,
-              summary: event.summary,
+              moderatorModel: event.moderator,
+              moderatorName: event.moderator_name || prev.moderatorName,
+              summary: event.summary || prev.summary,
+              summaryStreaming: false,
             }));
             break;
 
@@ -271,7 +345,7 @@ function App() {
           default:
             console.log('Unknown debate event:', event);
         }
-      }, abortController);
+      }, abortController, { enableWeb, moderatorModel });
     } catch (error) {
       console.error('Failed to start debate:', error);
       alert('Failed to start debate: ' + error.message);
@@ -285,6 +359,17 @@ function App() {
     debateAbortRef.current?.abort();
     debateAbortRef.current = null;
     setIsDebating(false);
+  };
+
+  const handleInterject = async (content) => {
+    const debateId = debateState?.debateId;
+    if (!debateId || !content?.trim()) return;
+    try {
+      await api.interjectDebate(debateId, content);
+    } catch (e) {
+      console.error('Interjection failed:', e);
+      alert('Could not send interjection: ' + e.message);
+    }
   };
 
   const handleDeleteConversation = async (conversationId) => {
@@ -305,7 +390,7 @@ function App() {
     }
   };
 
-  const handleSendMessage = async (content) => {
+  const handleSendMessage = async (content, { enableWeb = false } = {}) => {
     if (!currentConversationId) {
       console.error('[App] No conversation selected!');
       return;
@@ -482,7 +567,7 @@ function App() {
           default:
             console.log('[App] Unknown event type:', eventType);
         }
-      });
+      }, { enableWeb });
       console.log('[App] sendMessageStream completed');
     } catch (error) {
       console.error('[App] ✗ Failed to send message:', error);
@@ -541,6 +626,7 @@ function App() {
             />
           ) : (
             <DebateView
+              onInterject={handleInterject}
               debateState={debateState}
               isDebating={isDebating}
               onStop={handleStopDebate}

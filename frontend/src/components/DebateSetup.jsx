@@ -14,6 +14,8 @@ export default function DebateSetup({ onStartDebate, isDebating }) {
   const [selectedModels, setSelectedModels] = useState([]);
   const [modelRoles, setModelRoles] = useState({});
   const [useRoles, setUseRoles] = useState(false);
+  const [enableWeb, setEnableWeb] = useState(false);
+  const [moderatorModel, setModeratorModel] = useState('');
   const [allModels, setAllModels] = useState([]);
   const [availableRoles, setAvailableRoles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -49,6 +51,16 @@ export default function DebateSetup({ onStartDebate, isDebating }) {
       if (modelsData.models && modelsData.models.length >= 2) {
         const defaultModels = modelsData.models.slice(0, 3).map(m => m.id);
         setSelectedModels(defaultModels);
+      }
+
+      // Default the moderator to the configured chairman if available
+      try {
+        const councilConfig = await api.getCouncilConfig();
+        if (councilConfig?.chairman_model) {
+          setModeratorModel(councilConfig.chairman_model);
+        }
+      } catch (e) {
+        // Non-fatal — backend will fall back to the chairman default
       }
     } catch (error) {
       console.error('Failed to load data:', error);
@@ -128,6 +140,8 @@ export default function DebateSetup({ onStartDebate, isDebating }) {
       maxTurns,
       roles,
       costLimit,
+      enableWeb,
+      moderatorModel: moderatorModel || null,
     });
   };
 
@@ -373,9 +387,36 @@ export default function DebateSetup({ onStartDebate, isDebating }) {
           </div>
         </div>
 
+        <div className="debate-tools">
+          <div className="moderator-picker">
+            <label htmlFor="moderator-select">Moderator (writes the final summary):</label>
+            <select
+              id="moderator-select"
+              className="moderator-select"
+              value={moderatorModel}
+              onChange={(e) => setModeratorModel(e.target.value)}
+              disabled={isDebating}
+            >
+              <option value="">— use council chairman —</option>
+              {allModels.map((m) => (
+                <option key={m.id} value={m.id}>{m.name || m.id}</option>
+              ))}
+            </select>
+          </div>
+          <label className="web-toggle" title="Each panelist may search the web when speaking. Adds ~$0.02 per turn that searches.">
+            <input
+              type="checkbox"
+              checked={enableWeb}
+              onChange={(e) => setEnableWeb(e.target.checked)}
+              disabled={isDebating}
+            />
+            <span>🌐 Allow web search for panelists</span>
+          </label>
+        </div>
+
         <div className="debate-estimate">
           <CostBadge total={estimatedCost} estimated label="Est. cost" />
-          <span className="estimate-hint">rough estimate — actual cost is tracked live</span>
+          <span className="estimate-hint">rough estimate — web search adds ~$0.02 per searching call</span>
         </div>
 
         <button

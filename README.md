@@ -2,155 +2,125 @@
 
 ![llmcouncil](header.jpg)
 
-A local web application that queries multiple LLMs simultaneously, has them anonymously review and rank each other's responses, and synthesizes a final answer through a designated "Chairman" model. Also features a **multi-model debate mode** where AI models discuss topics with each other.
+A local web app for thinking *with* multiple LLMs instead of just *at* one. Pick a panel of models, send them the same question, and watch them respond, peer-review each other, and synthesize a final answer — or kick off a live, streaming **panel debate** that you can jump into mid-conversation.
 
-**Based on [karpathy/llm-council](https://github.com/karpathy/llm-council)** — this fork adds dynamic model configuration, multi-model debates, real-time streaming, and other enhancements.
+Two modes:
+- **Council** — a 3-stage deliberation pipeline (parallel answers → anonymous peer ranking → chairman synthesis).
+- **Debate** — a moderated, role-assigned, streaming panel discussion that you can interrupt with a "raise hand" message.
 
----
-
-## How It Works
-
-### Council Mode
-
-Instead of asking a question to a single LLM, you can assemble your own "LLM Council". The app uses [OpenRouter](https://openrouter.ai/) to send your query to multiple LLMs in a 3-stage deliberation process:
-
-1. **Stage 1: First Opinions** — Your query is sent to all council members in parallel. Individual responses stream in real-time with a tabbed interface.
-
-2. **Stage 2: Peer Review** — Each LLM reviews and ranks the other responses. Identities are anonymized (Response A, B, C...) to prevent bias. Aggregate rankings are calculated.
-
-3. **Stage 3: Final Synthesis** — The Chairman model compiles all responses and rankings into a single, comprehensive final answer.
-
-### Debate Mode
-
-Start a multi-model debate on any topic:
-
-1. **Select Debaters** — Choose 2+ models to participate in the debate
-2. **Set Topic** — Enter a topic for the models to discuss
-3. **Watch the Discussion** — Models take turns responding to each other in a chat-bubble interface
-4. **Optional Roles** — Assign adversarial roles (advocate, critic, etc.) to prevent echo chambers
+Both modes can use OpenRouter's web search plugin so the models cite live sources.
 
 ---
 
-## Features
+## Debate Mode (the headline feature)
 
-### Core Features (from original)
-- **Multi-Model Deliberation** — Query multiple LLMs simultaneously
-- **Anonymized Peer Review** — Models can't play favorites when evaluating each other
-- **Transparent Evaluation** — View raw evaluations and parsed rankings for validation
-- **Conversation History** — All conversations are saved locally
-- **Markdown Rendering** — Full markdown support for code, tables, and formatting
+Most multi-LLM tools just fan out queries. Debate Mode is structurally different — it's a living conversation.
 
-### New Features (this fork)
-- **⚙️ Dynamic Model Configuration** — Configure council members and chairman via the settings pane. Select from any OpenRouter model (OpenAI, Anthropic, Google, and more).
-- **🔄 Persistent Conversations** — Navigate away from active conversations and return without losing progress or cancelling ongoing requests.
-- **📊 Model Metadata** — View context length, pricing, and descriptions when selecting models.
-- **💬 Multi-Model Debates** — Watch AI models debate topics with each other in a beautiful chat-bubble interface.
-- **⚡ Real-Time Streaming** — See model responses stream in real-time during Stage 1 with a resizable panel.
-- **🎨 Modern UI** — Clean, light-themed interface with smooth animations and intuitive controls.
+- **Moderated panel.** Pick 2+ models, pick a moderator. The moderator decides who speaks next each turn based on who has something valuable to add. When the discussion has run its course, it concludes naturally — no fixed round-robin.
+- **Adversarial roles** (optional). Assign roles per panelist — Advocate, Skeptic, Devil's Advocate, Synthesizer, Fact-Checker, Pragmatist — to prevent the usual LLM echo chamber.
+- **Streaming token-by-token.** Every panelist turn streams as it generates, the way real speech feels. The moderator summary also streams.
+- **Brevity-enforced prompts.** Opening statements capped at ~60 words, replies at ~45. Lead with the point, one reason, stop. No "great question" preamble, no recap, no waffling.
+- **🙋 Raise your hand.** A textarea sits below the live transcript. Type anytime — your message gets injected at the next turn boundary, the moderator sees it, and a panelist addresses you directly. You're in the room, not in the audience.
+- **🌐 Optional web search.** Toggle the OpenRouter web plugin on at debate start. Panelists can search live, and any turn that searched shows a **Sources** footer with linked citations.
+- **Live cost tracking.** Hard cost limit, per-turn cost, total displayed in real time.
+- **Choose your moderator.** Independent of the panel — pick a different model to write the final summary (often you want a reasoning-heavy model for synthesis).
+
+The result feels like listening in on a panel where you can interject. Not a chat with one assistant, not a wall of parallel answers — a conversation.
+
+---
+
+## Council Mode
+
+The original 3-stage flow, kept and extended.
+
+1. **Stage 1 — Individual Responses.** Your query goes to every council member in parallel. Each response streams into its own tab.
+2. **Stage 2 — Anonymized Peer Review.** Each model reviews the other answers, identities anonymized as Response A / B / C / … to prevent favoritism. Models produce written evaluations and rank-ordered lists. The app aggregates ranks across reviewers.
+3. **Stage 3 — Chairman Synthesis.** The chairman model reads everything and writes the final synthesized answer.
+
+Extras on top of the original:
+- **🌐 Per-question web search** — toggle on the Council Configuration card; only Stage 1 (the answering stage) searches, so cost doesn't multiply across stages
+- **Live streaming** through every stage, including Stage 2 ranking and Stage 3 synthesis
+- **Per-model skip + force-continue** if one provider hangs
+- **Sources footer** under any Stage 1 answer that used web search
+- **Cost banking** — real per-call costs are pulled from OpenRouter `usage.cost` and accumulated
+- **Conversation persistence** — navigate away from a running deliberation and come back later
 
 ---
 
 ## Quick Start
 
 ### Prerequisites
-
 - [Python 3.10+](https://www.python.org/)
 - [Node.js 18+](https://nodejs.org/)
 - [uv](https://docs.astral.sh/uv/) (Python package manager)
-- [OpenRouter API key](https://openrouter.ai/)
+- An [OpenRouter API key](https://openrouter.ai/)
 
-### Installation
+### Install
+```bash
+git clone https://github.com/hummaam27/LLM-Council-.git
+cd LLM-Council-
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/hummaam27/LLM-Council-.git
-   cd LLM-Council-
-   ```
+# Backend
+uv sync
 
-2. **Install dependencies**
-   ```bash
-   # Backend
-   uv sync
+# Frontend
+cd frontend && npm install && cd ..
 
-   # Frontend
-   cd frontend
-   npm install
-   cd ..
-   ```
+# API key
+cp .env.example .env
+# edit .env and paste your OpenRouter key
+```
 
-3. **Configure API key**
-   ```bash
-   cp .env.example .env
-   # Edit .env and add your OpenRouter API key
-   ```
-
-### Running
-
-**Option 1: Use the start script**
+### Run
 ```bash
 # Linux/macOS
 ./start.sh
 
 # Windows
 .\start.bat
-# or
-.\start.ps1
 ```
 
-**Option 2: Run manually**
-
-Terminal 1 (Backend):
+Or manually, in two terminals:
 ```bash
+# Terminal 1 — backend on http://127.0.0.1:8090
 uv run python -m backend.main
+
+# Terminal 2 — frontend on http://localhost:5173
+cd frontend && npm run dev
 ```
 
-Terminal 2 (Frontend):
-```bash
-cd frontend
-npm run dev
-```
-
-Open http://localhost:5173 in your browser.
+Open http://localhost:5173.
 
 ---
 
 ## Configuration
 
-### Dynamic Model Selection
+**Dynamic model selection (UI).** The Council Configuration card on the chat screen and the Debate setup form both pull the live OpenRouter model list. Pick any panelists, any chairman, any debate moderator — filter by provider, search by name, see pricing and context length inline.
 
-Click the ⚙️ (settings) button in the sidebar to:
-- **Select Council Members** — Choose multiple models from OpenRouter to participate in deliberation
-- **Select Chairman** — Choose one model to synthesize the final answer
-- **View Model Info** — See pricing, context length, and descriptions for each model
-
-Models are fetched live from OpenRouter's API. Filter by provider (OpenAI, Anthropic, Google, etc.).
-
-### Default Models (config file)
-
-Edit `backend/config.py` to change the default council:
-
+**Defaults (config file).** Edit `backend/config.py`:
 ```python
 COUNCIL_MODELS = [
-    "openai/gpt-5.1",
-    "google/gemini-3-pro-preview",
-    "anthropic/claude-sonnet-4.5",
-    "x-ai/grok-4",
+    "anthropic/claude-haiku-4.5",
+    "moonshotai/kimi-k2.5",
+    "z-ai/glm-4.7",
 ]
-
-CHAIRMAN_MODEL = "google/gemini-3-pro-preview"
+CHAIRMAN_MODEL = "google/gemini-3-flash-preview"
 ```
+
+**Web search costs.** OpenRouter's web plugin adds ~$0.004 per result returned. The app uses `max_results=3` by default; expect roughly $0.02 per searching call. Off by default everywhere.
 
 ---
 
 ## Tech Stack
 
-| Component | Technology |
-|-----------|------------|
-| **Backend** | FastAPI, Python 3.10+, async httpx |
-| **Frontend** | React + Vite, react-markdown |
-| **API** | OpenRouter (unified LLM gateway) |
-| **Storage** | Local JSON files |
-| **Package Management** | uv (Python), npm (JavaScript) |
+| Layer | Tech |
+|---|---|
+| Backend | FastAPI, Python 3.10+, async `httpx`, SSE streaming |
+| Frontend | React + Vite, `react-markdown` |
+| LLM gateway | [OpenRouter](https://openrouter.ai/) (all providers, one API key) |
+| Tools | OpenRouter `web` plugin (search + citations) |
+| Storage | Local JSON files in `data/conversations/` |
+| Cost tracking | Live `usage.cost` from OpenRouter, cached pricing table fallback |
 
 ---
 
@@ -159,37 +129,60 @@ CHAIRMAN_MODEL = "google/gemini-3-pro-preview"
 ```
 LLM-Council-/
 ├── backend/
-│   ├── config.py           # Model configuration
-│   ├── council.py          # 3-stage deliberation logic
-│   ├── main.py             # FastAPI endpoints
-│   ├── openrouter.py       # OpenRouter API client
+│   ├── config.py           # Council & chairman model defaults
+│   ├── council.py          # 3-stage deliberation orchestration
+│   ├── debate.py           # Live panel debate (streaming, roles, interjections)
+│   ├── openrouter.py       # OpenRouter client (chat, stream, web plugin)
+│   ├── cost.py             # Per-call cost extraction + pricing cache
+│   ├── jobs.py             # Background job manager (status, skip, force-continue)
 │   ├── storage.py          # Conversation persistence
-│   └── file_processing.py  # File upload handling
+│   ├── file_processing.py  # PDF / image attachment handling
+│   └── main.py             # FastAPI app + SSE endpoints
 ├── frontend/
 │   └── src/
-│       ├── components/     # React components
-│       ├── api.js          # Backend API client
-│       └── utils/          # Utility functions
+│       ├── App.jsx
+│       ├── api.js
+│       ├── components/
+│       │   ├── ChatInterface.jsx       # Council chat screen
+│       │   ├── CouncilModelSelector.jsx# Panel/chairman/tools config card
+│       │   ├── Stage1/2/3*.jsx         # Per-stage views (streaming + final)
+│       │   ├── DebateSetup.jsx         # Debate config form
+│       │   ├── DebateView.jsx          # Live debate transcript + raise-hand
+│       │   ├── SourceList.jsx          # Web search citations footer
+│       │   └── CostBadge.jsx
+│       └── utils/
+├── docs/                   # Design notes and architecture research
 ├── data/                   # Conversation storage (gitignored)
-├── .env.example            # Environment template
-└── start.sh                # Launch script
+├── .env.example
+├── start.sh / start.bat
+└── pyproject.toml
 ```
+
+---
+
+## Roadmap (loose)
+
+Ideas being kicked around, in rough priority order:
+
+- **Ideation Room** — a third mode built on the debate scaffolding: persona-driven panel (The Teen, The Therapist, The Viral Creator, The Skeptic, The Outsider) with seed → mutation cycles, bisociation injection, and the user as a peer.
+- **@mention routing** in debate — direct a question at a specific panelist, bypassing moderator selection.
+- **Steering nudges** — small buttons during a live debate (*go deeper*, *challenge that*, *pivot to practical*) that inject a moderator hint without requiring you to type.
+- **Citation rendering inline** — anchor citations to the sentence that used them, not just a footer.
+- **Native tool calling** — beyond OpenRouter plugins: calculator, code execution, retrieval over user-attached PDFs.
 
 ---
 
 ## Attribution
 
-This project is based on [llm-council](https://github.com/karpathy/llm-council) by [Andrej Karpathy](https://github.com/karpathy). The original is a "vibe-coded" Saturday hack for exploring multiple LLMs side by side.
+The original 3-stage Council architecture and the "vibe-coded Saturday hack" framing came from [llm-council](https://github.com/karpathy/llm-council) by [Andrej Karpathy](https://github.com/karpathy). This fork started from that foundation and has been substantially rebuilt around two axes:
 
-**Modifications in this fork:**
-- Dynamic model selection via UI (previously required editing config files)
-- Improved conversation persistence and navigation
-- Enhanced model metadata display (pricing, context length)
+- **Debate Mode** — moderator-orchestrated panel, role assignment, token streaming, raise-hand interjections, web search with citations, moderator picker, brevity-enforced prompts, live cost tracking with hard limits.
+- **Council Mode extensions** — dynamic model selection in the UI, per-stage streaming, skip/force-continue controls, web search for Stage 1, sources rendering, persistent conversations with background jobs, real cost tracking from OpenRouter usage.
+
+Original concept and Council scaffolding © Andrej Karpathy. Everything else in this fork © 2025–2026 contributors.
 
 ---
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
-
-Original work © Andrej Karpathy. Modifications © 2025.
+MIT — see [LICENSE](LICENSE).

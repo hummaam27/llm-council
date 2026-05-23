@@ -76,7 +76,7 @@ export const api = {
   /**
    * Send a message in a conversation.
    */
-  async sendMessage(conversationId, content) {
+  async sendMessage(conversationId, content, { enableWeb = false } = {}) {
     const response = await fetch(
       `${API_BASE}/api/conversations/${conversationId}/message`,
       {
@@ -84,7 +84,7 @@ export const api = {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ content, enable_web: enableWeb }),
       }
     );
     if (!response.ok) {
@@ -100,7 +100,7 @@ export const api = {
    * @param {function} onEvent - Callback function for each event: (eventType, data) => void
    * @returns {Promise<void>}
    */
-  async sendMessageStream(conversationId, content, onEvent) {
+  async sendMessageStream(conversationId, content, onEvent, { enableWeb = false } = {}) {
     log('Stream', `Starting stream request for conversation ${conversationId.slice(0, 8)}...`);
     log('Stream', `Query: "${content.slice(0, 100)}${content.length > 100 ? '...' : ''}"`);
     
@@ -113,7 +113,7 @@ export const api = {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ content }),
+          body: JSON.stringify({ content, enable_web: enableWeb }),
         }
       );
     } catch (fetchError) {
@@ -318,6 +318,24 @@ export const api = {
    * Get available debate roles.
    * @returns {Promise<{roles: Array}>}
    */
+  /**
+   * Send a user interjection into a live debate.
+   * @param {string} debateId
+   * @param {string} content
+   */
+  async interjectDebate(debateId, content) {
+    const response = await fetch(`${API_BASE}/api/debate/${debateId}/interject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || 'Failed to send interjection');
+    }
+    return response.json();
+  },
+
   async getDebateRoles() {
     const response = await fetch(`${API_BASE}/api/debate/roles`);
     if (!response.ok) {
@@ -336,7 +354,7 @@ export const api = {
    * @param {function} onEvent - Callback for each event: (event) => void
    * @returns {Promise<void>}
    */
-  async startDebateStream(topic, models, maxTurns, roles, costLimit, onEvent, abortController) {
+  async startDebateStream(topic, models, maxTurns, roles, costLimit, onEvent, abortController, { enableWeb = false, moderatorModel = null } = {}) {
     let response;
     try {
       response = await fetch(`${API_BASE}/api/debate/start`, {
@@ -350,6 +368,8 @@ export const api = {
           max_turns: maxTurns,
           roles: roles || null,
           cost_limit: costLimit ?? 10,
+          enable_web: enableWeb,
+          moderator_model: moderatorModel,
         }),
         signal: abortController?.signal,
       });

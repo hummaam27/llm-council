@@ -40,3 +40,6 @@ logs/
 
 # OS files
 Thumbs.db
+
+# Claude Code per-project state
+.claude/
