@@ -12,6 +12,19 @@ Both modes can use OpenRouter's web search plugin so the models cite live source
 
 ---
 
+## Screenshots
+
+**Council in action** — three models' responses streaming in parallel, with the Stage 1 / Stage 2 / Stage 3 view of the deliberation.
+![Council deliberation](images/council-deliberation.png)
+
+**Council setup** — Council Configuration card with panel members, chairman, and the per-question web search toggle.
+![Council setup](images/council-setup.png)
+
+**Debate setup** — topic, rounds, cost limit, panelists, role assignment, moderator picker, and web search toggle.
+![Debate setup](images/debate-setup.png)
+
+---
+
 ## Debate Mode (the headline feature)
 
 Most multi-LLM tools just fan out queries. Debate Mode is structurally different — it's a living conversation.
