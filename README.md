@@ -1,7 +1,5 @@
 # LLM Council
 
-![llmcouncil](header.jpg)
-
 A local web app for thinking *with* multiple LLMs instead of just *at* one. Pick a panel of models, send them the same question, and watch them respond, peer-review each other, and synthesize a final answer — or kick off a live, streaming **panel debate** that you can jump into mid-conversation.
 
 Two modes:
